@@ -8,6 +8,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../../core/router/app_routes.dart';
 import '../../location/data/location_service.dart';
 import '../../location/domain/location_result.dart';
+import '../../offline/presentation/offline_map_widgets.dart';
 import '../../search/domain/place.dart';
 import '../domain/map_config.dart';
 import 'widgets/map_view.dart';
@@ -35,6 +36,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   static const _myLocationZoom = 16.0;
   static const _placeZoom = 17.0;
+
+  /// "Later" on the offline-map prompt hides it until the next app start.
+  bool _offlineBannerDismissed = false;
 
   /// Place picked in search, shown with a marker and a card.
   Place? _selectedPlace;
@@ -224,7 +228,22 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             left: 12,
             right: 12,
             top: 0,
-            child: SafeArea(child: _SearchBar(onTap: _openSearch)),
+            child: SafeArea(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _SearchBar(onTap: _openSearch),
+                  if (!_offlineBannerDismissed)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: OfflineMapBanner(
+                        onDismiss: () =>
+                            setState(() => _offlineBannerDismissed = true),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
           Positioned(
             left: 0,
@@ -423,7 +442,8 @@ class _LoadError extends StatelessWidget {
         Text('Не удалось загрузить карту', style: theme.textTheme.titleMedium),
         const SizedBox(height: 4),
         Text(
-          'Проверьте подключение к интернету. Офлайн-карта появится позже.',
+          'Проверьте интернет. Чтобы карта работала без связи, '
+          'скачайте её в разделе «Профиль».',
           style: theme.textTheme.bodySmall,
           textAlign: TextAlign.center,
         ),

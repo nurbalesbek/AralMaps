@@ -2,7 +2,7 @@
 
 Offline-first mobile map of Aral (Аральск), Kazakhstan. Flutter + MapLibre + OpenStreetMap.
 
-> Status: **Phase 4 — online map of Aral, "where am I", offline place search.** Routing and offline map tiles are not implemented yet.
+> Status: **Phase 5 — offline map of Aral (one-time ~14 MB download), "where am I", offline place search.** Routing is not implemented yet.
 
 ## Requirements
 
@@ -45,6 +45,13 @@ Folders are created when the first file needs them, not upfront.
 
 Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), available under the
 Open Database License (ODbL). Attribution must stay visible in the app.
+
+### Offline map
+
+The app downloads the map once into MapLibre's offline database (style, tiles, fonts from
+OpenFreeMap): Aral town at zoom 10–16 and the surroundings (Aral Sea, roads) at zoom 4–10,
+about 14 MB. After that the map works without internet. Regions are defined in
+`lib/features/offline/data/offline_map_service.dart`; status and delete are in the Profile tab.
 
 ### Search data
 

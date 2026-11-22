@@ -1,4 +1,9 @@
+import 'dart:async';
+
 import 'package:aralmap/app.dart';
+import 'package:aralmap/features/offline/data/offline_map_service.dart';
+import 'package:aralmap/features/offline/presentation/offline_map_controller.dart';
+import 'package:flutter/services.dart';
 import 'package:aralmap/features/location/data/location_service.dart';
 import 'package:aralmap/features/location/domain/location_result.dart';
 import 'package:aralmap/features/map/presentation/widgets/map_view.dart';
@@ -98,13 +103,49 @@ const _street = Place(
   longitude: 61.67,
 );
 
-Widget appWith(FakeMap map, {LocationService? location}) => ProviderScope(
+class FakeOfflineMapService implements OfflineMapService {
+  FakeOfflineMapService({this.stored, this.fail = false});
+
+  int? stored;
+  final bool fail;
+
+  /// Lets a test hold the download "in progress" until it completes this.
+  Completer<void>? gate;
+
+  @override
+  Future<int?> storedBytes() async => stored;
+
+  @override
+  Future<void> download({
+    required void Function(OfflineProgress) onProgress,
+  }) async {
+    onProgress((completed: 1, required: 2, bytes: 3 * 1024 * 1024));
+    await gate?.future;
+    if (fail) {
+      throw PlatformException(code: 'TILE_COUNT_LIMIT_EXCEEDED');
+    }
+    stored = 12 * 1024 * 1024;
+  }
+
+  @override
+  Future<void> delete() async => stored = null;
+}
+
+Widget appWith(
+  FakeMap map, {
+  LocationService? location,
+  OfflineMapService? offline,
+}) => ProviderScope(
   overrides: [
     mapViewBuilderProvider.overrideWithValue(map.build),
     locationServiceProvider.overrideWithValue(
       location ?? FakeLocationService(result: _inAral),
     ),
     placesProvider.overrideWith((ref) async => [_pharmacy, _street]),
+    // Default: already downloaded, so the prompt does not get in the way.
+    offlineMapServiceProvider.overrideWithValue(
+      offline ?? FakeOfflineMapService(stored: 1024 * 1024),
+    ),
   ],
   child: const AralMapApp(),
 );
@@ -273,6 +314,80 @@ void main() {
         places.where((p) => p.category == PlaceCategory.street),
         isNotEmpty,
       );
+    });
+  });
+
+  group('Offline map', () {
+    testWidgets('no prompt when the map is already downloaded', (tester) async {
+      await tester.pumpWidget(appWith(FakeMap()));
+      await tester.pumpAndSettle();
+      expect(find.text('Карта без интернета'), findsNothing);
+    });
+
+    testWidgets('download from the prompt: progress, then prompt disappears', (
+      tester,
+    ) async {
+      final offline = FakeOfflineMapService()..gate = Completer<void>();
+      await tester.pumpWidget(appWith(FakeMap(), offline: offline));
+      await tester.pumpAndSettle();
+      expect(find.text('Карта без интернета'), findsOneWidget);
+
+      await tester.tap(find.text('Скачать'));
+      await tester.pump();
+      expect(find.text('Скачивание карты… 50%'), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+
+      offline.gate!.complete();
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Скачивание карты'), findsNothing);
+      expect(find.text('Карта без интернета'), findsNothing);
+
+      await tester.tap(find.text('Профиль'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Скачана · 12 МБ'), findsOneWidget);
+    });
+
+    testWidgets('"Later" hides the prompt', (tester) async {
+      await tester.pumpWidget(
+        appWith(FakeMap(), offline: FakeOfflineMapService()),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Позже'));
+      await tester.pumpAndSettle();
+      expect(find.text('Карта без интернета'), findsNothing);
+    });
+
+    testWidgets('failed download offers a retry', (tester) async {
+      await tester.pumpWidget(
+        appWith(FakeMap(), offline: FakeOfflineMapService(fail: true)),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Скачать'));
+      await tester.pumpAndSettle();
+      expect(find.text('Карта не скачана'), findsOneWidget);
+      expect(find.text('Повторить'), findsOneWidget);
+    });
+
+    testWidgets('delete from Profile asks first, then removes the map', (
+      tester,
+    ) async {
+      final offline = FakeOfflineMapService(stored: 5 * 1024 * 1024);
+      await tester.pumpWidget(appWith(FakeMap(), offline: offline));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Профиль'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Скачана · 5.0 МБ'), findsOneWidget);
+
+      await tester.tap(find.text('Удалить'));
+      await tester.pumpAndSettle();
+      expect(find.text('Удалить офлайн-карту?'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Удалить'));
+      await tester.pumpAndSettle();
+      expect(offline.stored, isNull);
+      expect(find.textContaining('Не скачана'), findsOneWidget);
     });
   });
 
