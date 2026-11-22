@@ -47,10 +47,13 @@ app.*.map.json
 # Widget Preview related
 .widget_preview/
 
-# Secrets — never commit (Supabase keys etc. come in Phase 9)
+# Secrets — never commit
 .env
 .env.*
 !.env.example
+# Supabase URL + key for --dart-define-from-file (template is committed)
+env/*.json
+!env/*.example.json
 *.keystore
 *.jks
 android/key.properties

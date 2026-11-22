@@ -5,6 +5,7 @@ abstract final class AppRoutes {
   static const explore = '/explore';
   static const profile = '/profile';
   static const search = '/search';
+  static const signIn = '/sign-in';
 
   static String sight(String id) => '$explore/sight/$id';
 }

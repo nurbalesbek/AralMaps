@@ -1,7 +1,11 @@
 import 'dart:async';
 
+import 'dart:io';
+
 import 'package:aralmap/app.dart';
+import 'package:aralmap/features/account/data/auth_service.dart';
 import 'package:aralmap/features/favorites/data/favorites_repository.dart';
+import 'package:aralmap/features/favorites/data/remote_favorites.dart';
 import 'package:aralmap/features/offline/data/offline_map_service.dart';
 import 'package:aralmap/features/offline/presentation/offline_map_controller.dart';
 import 'package:flutter/services.dart';
@@ -126,17 +130,93 @@ String _expectedSummary(TravelMode mode) {
 }
 
 class FakeFavoritesRepository implements FavoritesRepository {
-  FakeFavoritesRepository([List<Place> initial = const []])
-    : saved = [...initial];
+  FakeFavoritesRepository([
+    List<Place> initial = const [],
+    this.meta = const SyncMeta(),
+  ]) : saved = [...initial];
 
   List<Place> saved;
+  SyncMeta meta;
 
   @override
   Future<List<Place>> load() async => [...saved];
 
   @override
   Future<void> save(List<Place> places) async => saved = [...places];
+
+  @override
+  Future<SyncMeta> loadMeta() async => meta;
+
+  @override
+  Future<void> saveMeta(SyncMeta m) async => meta = m;
 }
+
+class FakeAuthService implements AuthService {
+  // A private field can't be a named initializing formal.
+  // ignore: prefer_initializing_formals
+  FakeAuthService({AppUser? user, this.validCode = '123456'}) : _user = user;
+
+  AppUser? _user;
+  final String validCode;
+  final _changes = StreamController<AppUser?>.broadcast();
+  final sentTo = <String>[];
+  bool deleted = false;
+
+  @override
+  bool get isAvailable => true;
+  @override
+  AppUser? get currentUser => _user;
+  @override
+  Stream<AppUser?> get userChanges => _changes.stream;
+
+  void _set(AppUser? u) {
+    _user = u;
+    _changes.add(u);
+  }
+
+  @override
+  Future<void> sendCode(String email) async => sentTo.add(email);
+
+  @override
+  Future<void> verifyCode(String email, String code) async {
+    if (code != validCode) {
+      throw const AuthFailure('Код неверный или устарел. Запросите новый.');
+    }
+    _set(AppUser(id: 'user-1', email: email));
+  }
+
+  @override
+  Future<void> signOut() async => _set(null);
+
+  @override
+  Future<void> deleteAccount() async {
+    deleted = true;
+    _set(null);
+  }
+}
+
+class FakeRemoteFavorites implements RemoteFavorites {
+  FakeRemoteFavorites([this.stored]);
+
+  List<Place>? stored;
+  bool offline = false;
+  int pushes = 0;
+
+  @override
+  Future<List<Place>?> fetch(String userId) async {
+    if (offline) throw const SocketException('offline');
+    return stored == null ? null : [...stored!];
+  }
+
+  @override
+  Future<void> push(String userId, List<Place> places) async {
+    if (offline) throw const SocketException('offline');
+    pushes++;
+    stored = [...places];
+  }
+}
+
+const _alice = AppUser(id: 'user-1', email: 'alice@mail.kz');
 
 class FakeOfflineMapService implements OfflineMapService {
   FakeOfflineMapService({this.stored, this.fail = false});
@@ -171,6 +251,8 @@ Widget appWith(
   LocationService? location,
   OfflineMapService? offline,
   FavoritesRepository? favorites,
+  AuthService? auth,
+  RemoteFavorites? remote,
 }) => ProviderScope(
   overrides: [
     mapViewBuilderProvider.overrideWithValue(map.build),
@@ -186,6 +268,11 @@ Widget appWith(
     favoritesRepositoryProvider.overrideWithValue(
       favorites ?? FakeFavoritesRepository(),
     ),
+    // Default: a build without Supabase keys (accounts unavailable).
+    authServiceProvider.overrideWithValue(
+      auth ?? const UnavailableAuthService(),
+    ),
+    remoteFavoritesProvider.overrideWithValue(remote),
   ],
   child: const AralMapApp(),
 );
@@ -713,6 +800,231 @@ void main() {
       }
     }
     expect(sights.map((s) => s.id).toSet().length, sights.length);
+  });
+
+  group('Account', () {
+    Future<void> openProfile(WidgetTester tester) async {
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Профиль'));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> openFavorites(WidgetTester tester) async {
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Избранное'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('build without keys: accounts shown as unavailable', (
+      tester,
+    ) async {
+      await tester.pumpWidget(appWith(FakeMap()));
+      await tester.pumpAndSettle();
+      await openProfile(tester);
+      expect(find.text('Аккаунты недоступны в этой версии'), findsOneWidget);
+    });
+
+    testWidgets('sign in with an emailed code', (tester) async {
+      final auth = FakeAuthService();
+      await tester.pumpWidget(
+        appWith(FakeMap(), auth: auth, remote: FakeRemoteFavorites()),
+      );
+      await tester.pumpAndSettle();
+      await openProfile(tester);
+
+      await tester.tap(find.text('Войти'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'not-an-email');
+      await tester.tap(find.text('Получить код'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Введите адрес почты'), findsOneWidget);
+      expect(auth.sentTo, isEmpty);
+
+      await tester.enterText(find.byType(TextField), 'alice@mail.kz');
+      await tester.tap(find.text('Получить код'));
+      await tester.pumpAndSettle();
+      expect(auth.sentTo, ['alice@mail.kz']);
+      expect(
+        find.textContaining('отправили код на alice@mail.kz'),
+        findsOneWidget,
+      );
+
+      await tester.enterText(find.byType(TextField), '000000');
+      await tester.tap(find.text('Войти'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Код неверный'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), '123456');
+      await tester.tap(find.text('Войти'));
+      await tester.pumpAndSettle();
+
+      // Back on Profile, signed in and synced.
+      expect(find.text('alice@mail.kz'), findsOneWidget);
+      expect(find.text('Избранное сохранено в аккаунте'), findsOneWidget);
+      // Let the resend countdown timer finish.
+      await tester.pump(const Duration(seconds: 61));
+    });
+
+    testWidgets('first sign-in merges phone and account favorites', (
+      tester,
+    ) async {
+      final local = FakeFavoritesRepository([_pharmacy]);
+      final remote = FakeRemoteFavorites([_street]);
+      await tester.pumpWidget(
+        appWith(
+          FakeMap(),
+          favorites: local,
+          auth: FakeAuthService(user: _alice),
+          remote: remote,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openFavorites(tester);
+
+      expect(find.text('Europharma'), findsOneWidget);
+      expect(find.text('Абая'), findsOneWidget);
+      expect(remote.stored, [_pharmacy, _street]);
+      expect(local.saved, [_pharmacy, _street]);
+      expect(local.meta.userId, 'user-1');
+    });
+
+    testWidgets('later start takes the account version (other phone)', (
+      tester,
+    ) async {
+      final local = FakeFavoritesRepository([
+        _pharmacy,
+      ], const SyncMeta(userId: 'user-1'));
+      final remote = FakeRemoteFavorites([_street]); // changed elsewhere
+      await tester.pumpWidget(
+        appWith(
+          FakeMap(),
+          favorites: local,
+          auth: FakeAuthService(user: _alice),
+          remote: remote,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openFavorites(tester);
+
+      expect(find.text('Абая'), findsOneWidget);
+      expect(find.text('Europharma'), findsNothing);
+    });
+
+    testWidgets('offline: changes stay on the phone and are sent later', (
+      tester,
+    ) async {
+      final local = FakeFavoritesRepository(
+        const [],
+        const SyncMeta(userId: 'user-1'),
+      );
+      final remote = FakeRemoteFavorites([])..offline = true;
+      await tester.pumpWidget(
+        appWith(
+          FakeMap(),
+          favorites: local,
+          auth: FakeAuthService(user: _alice),
+          remote: remote,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Save a place while offline.
+      await tester.tap(find.text('Поиск в Аральске'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'europharma');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Europharma'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Сохранить'));
+      await tester.pumpAndSettle();
+
+      expect(local.saved, [_pharmacy]);
+      expect(local.meta.dirty, isTrue);
+      expect(remote.stored, isEmpty);
+
+      await openProfile(tester);
+      expect(find.textContaining('изменения отправятся позже'), findsOneWidget);
+
+      // Internet is back: retry sends the phone's version.
+      remote.offline = false;
+      await tester.tap(find.byTooltip('Повторить синхронизацию'));
+      await tester.pumpAndSettle();
+      expect(remote.stored, [_pharmacy]);
+      expect(local.meta.dirty, isFalse);
+      expect(find.text('Избранное сохранено в аккаунте'), findsOneWidget);
+    });
+
+    testWidgets('a failed download does not mark the phone as newer', (
+      tester,
+    ) async {
+      final local = FakeFavoritesRepository([
+        _pharmacy,
+      ], const SyncMeta(userId: 'user-1'));
+      final remote = FakeRemoteFavorites([_street])..offline = true;
+      await tester.pumpWidget(
+        appWith(
+          FakeMap(),
+          favorites: local,
+          auth: FakeAuthService(user: _alice),
+          remote: remote,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(local.meta.dirty, isFalse);
+      expect(remote.stored, [_street]); // untouched
+    });
+
+    testWidgets('sign out clears favorites from the phone only', (
+      tester,
+    ) async {
+      final local = FakeFavoritesRepository([
+        _pharmacy,
+      ], const SyncMeta(userId: 'user-1'));
+      final remote = FakeRemoteFavorites([_pharmacy]);
+      await tester.pumpWidget(
+        appWith(
+          FakeMap(),
+          favorites: local,
+          auth: FakeAuthService(user: _alice),
+          remote: remote,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openProfile(tester);
+
+      await tester.tap(find.text('Выйти'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Выйти'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Вы не вошли'), findsOneWidget);
+      expect(local.saved, isEmpty);
+      expect(remote.stored, [_pharmacy]); // still in the account
+    });
+
+    testWidgets('delete account asks first, then signs out', (tester) async {
+      final auth = FakeAuthService(user: _alice);
+      await tester.pumpWidget(
+        appWith(
+          FakeMap(),
+          favorites: FakeFavoritesRepository([
+            _pharmacy,
+          ], const SyncMeta(userId: 'user-1')),
+          auth: auth,
+          remote: FakeRemoteFavorites([_pharmacy]),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openProfile(tester);
+
+      await tester.tap(find.text('Удалить аккаунт'));
+      await tester.pumpAndSettle();
+      expect(find.text('Удалить аккаунт?'), findsOneWidget);
+      await tester.tap(find.text('Удалить навсегда'));
+      await tester.pumpAndSettle();
+
+      expect(auth.deleted, isTrue);
+      expect(find.text('Вы не вошли'), findsOneWidget);
+    });
   });
 
   testWidgets('Switching tabs works', (tester) async {

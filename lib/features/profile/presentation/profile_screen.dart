@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../../account/presentation/account_section.dart';
 import '../../offline/presentation/offline_map_widgets.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -7,21 +8,15 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Профиль')),
       body: ListView(
-        children: [
-          const _SectionHeader('Карта'),
-          const OfflineMapSettingsTile(),
-          const Divider(height: 32),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              'Аккаунты появятся в Фазе 9.',
-              style: theme.textTheme.bodySmall,
-            ),
-          ),
+        children: const [
+          _SectionHeader('Аккаунт'),
+          AccountSection(),
+          Divider(height: 32),
+          _SectionHeader('Карта'),
+          OfflineMapSettingsTile(),
         ],
       ),
     );

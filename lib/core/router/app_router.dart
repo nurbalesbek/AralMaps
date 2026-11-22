@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/account/presentation/sign_in_screen.dart';
 import '../../features/favorites/presentation/favorites_screen.dart';
 import '../../features/map/presentation/map_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
@@ -66,6 +67,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.search,
         // `extra` (optional): hint text, e.g. when picking a route origin.
         builder: (context, state) => SearchScreen(hint: state.extra as String?),
+      ),
+      GoRoute(
+        path: AppRoutes.signIn,
+        builder: (context, state) => const SignInScreen(),
       ),
     ],
   );
