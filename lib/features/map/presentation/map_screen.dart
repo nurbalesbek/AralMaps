@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../location/data/location_service.dart';
+import '../../location/domain/location_result.dart';
 import '../domain/map_config.dart';
 import 'widgets/map_view.dart';
 
@@ -24,10 +26,80 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   /// Changing the key recreates the native map (used by "retry").
   Key _mapKey = UniqueKey();
 
+  /// Shows the blue dot. Only true once location permission is granted.
+  bool _myLocationEnabled = false;
+  bool _locating = false;
+
+  static const _myLocationZoom = 16.0;
+
   @override
   void initState() {
     super.initState();
     _startLoadTimeout();
+    _restoreLocationDot();
+  }
+
+  /// If permission was granted earlier, show the dot right away
+  /// (without prompting; the prompt only comes from the button).
+  Future<void> _restoreLocationDot() async {
+    final granted = await ref.read(locationServiceProvider).hasPermission();
+    if (granted && mounted) setState(() => _myLocationEnabled = true);
+  }
+
+  Future<void> _goToMyLocation() async {
+    if (_locating) return;
+    setState(() => _locating = true);
+    final service = ref.read(locationServiceProvider);
+    final result = await service.locate();
+    if (!mounted) return;
+    setState(() => _locating = false);
+
+    switch (result) {
+      case LocationFound(:final latitude, :final longitude):
+        setState(() => _myLocationEnabled = true);
+        await _controller?.animateCamera(
+          CameraUpdate.newLatLngZoom(
+            LatLng(latitude, longitude),
+            _myLocationZoom,
+          ),
+          duration: const Duration(milliseconds: 600),
+        );
+      case LocationFailed(:final reason):
+        _showLocationError(reason, service);
+    }
+  }
+
+  void _showLocationError(LocationFailure reason, LocationService service) {
+    final (message, action) = switch (reason) {
+      LocationFailure.serviceDisabled => (
+        'Геолокация выключена на телефоне',
+        SnackBarAction(
+          label: 'Включить',
+          onPressed: service.openLocationSettings,
+        ),
+      ),
+      LocationFailure.denied => (
+        'Без доступа к геолокации нельзя показать, где вы',
+        null,
+      ),
+      LocationFailure.deniedForever => (
+        'Доступ к геолокации запрещён. Разрешите его в настройках',
+        SnackBarAction(label: 'Настройки', onPressed: service.openAppSettings),
+      ),
+      LocationFailure.unavailable => (
+        'Не удалось определить местоположение. Попробуйте на открытом месте',
+        null,
+      ),
+    };
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          action: action,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
   }
 
   @override
@@ -78,6 +150,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               key: _mapKey,
               onMapCreated: (controller) => _controller = controller,
               onStyleLoaded: _onStyleLoaded,
+              myLocationEnabled: _myLocationEnabled,
             ),
           ),
           if (_status == _MapStatus.loading)
@@ -104,10 +177,29 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         ],
       ),
       floatingActionButton: _status == _MapStatus.ready
-          ? FloatingActionButton.small(
-              onPressed: _recenter,
-              tooltip: 'Показать Аральск',
-              child: const Icon(Icons.location_city),
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                FloatingActionButton.small(
+                  heroTag: 'recenter-city',
+                  onPressed: _recenter,
+                  tooltip: 'Показать Аральск',
+                  child: const Icon(Icons.location_city),
+                ),
+                const SizedBox(height: 12),
+                FloatingActionButton(
+                  heroTag: 'my-location',
+                  onPressed: _locating ? null : _goToMyLocation,
+                  tooltip: 'Где я',
+                  child: _locating
+                      ? const SizedBox.square(
+                          dimension: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2.5),
+                        )
+                      : const Icon(Icons.my_location),
+                ),
+              ],
             )
           : null,
     );

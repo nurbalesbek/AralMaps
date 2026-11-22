@@ -8,6 +8,7 @@ typedef MapViewBuilder = Widget Function({
   Key? key,
   required void Function(MapLibreMapController controller) onMapCreated,
   required VoidCallback onStyleLoaded,
+  required bool myLocationEnabled,
 });
 
 /// Builds the native map. Overridden in widget tests, where platform views
@@ -20,6 +21,7 @@ Widget _buildMapLibreView({
   Key? key,
   required void Function(MapLibreMapController controller) onMapCreated,
   required VoidCallback onStyleLoaded,
+  required bool myLocationEnabled,
 }) {
   return MapLibreMap(
     key: key,
@@ -31,5 +33,8 @@ Widget _buildMapLibreView({
     // MapScreen shows the attribution as always-visible text, so the native
     // "i" button is redundant (and overlapped that text).
     attributionEnabled: false,
+    // Blue dot. Must only be true once location permission is granted,
+    // otherwise the native location component fails.
+    myLocationEnabled: myLocationEnabled,
   );
 }
