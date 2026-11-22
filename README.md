@@ -2,14 +2,14 @@
 
 Offline-first mobile map of Aral (Аральск), Kazakhstan. Flutter + MapLibre + OpenStreetMap.
 
-> Status: **Phase 1 — project setup.** The map, GPS, search and routing are not implemented yet.
+> Status: **Phase 2 — online map of Aral.** GPS, search, routing and offline tiles are not implemented yet.
 
 ## Requirements
 
 | Tool | Version used |
 |---|---|
 | Flutter | 3.50.1 (stable), Dart 3.14 |
-| JDK | Temurin 17 |
+| JDK | Temurin 21 (required by `maplibre_gl`) |
 | Android SDK | Platform 36, Build-Tools 36 |
 
 The project path must contain only Latin characters and no spaces (Gradle fails on Cyrillic paths on Windows).
