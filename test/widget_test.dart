@@ -2,6 +2,8 @@ import 'package:aralmap/app.dart';
 import 'package:aralmap/features/location/data/location_service.dart';
 import 'package:aralmap/features/location/domain/location_result.dart';
 import 'package:aralmap/features/map/presentation/widgets/map_view.dart';
+import 'package:aralmap/features/search/data/places_repository.dart';
+import 'package:aralmap/features/search/domain/place.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -83,12 +85,26 @@ const _inAral = LocationFound(
   accuracyMeters: 10,
 );
 
+const _pharmacy = Place(
+  name: 'Europharma',
+  category: PlaceCategory.pharmacy,
+  latitude: 46.79,
+  longitude: 61.66,
+);
+const _street = Place(
+  name: 'Абая',
+  category: PlaceCategory.street,
+  latitude: 46.8,
+  longitude: 61.67,
+);
+
 Widget appWith(FakeMap map, {LocationService? location}) => ProviderScope(
   overrides: [
     mapViewBuilderProvider.overrideWithValue(map.build),
     locationServiceProvider.overrideWithValue(
       location ?? FakeLocationService(result: _inAral),
     ),
+    placesProvider.overrideWith((ref) async => [_pharmacy, _street]),
   ],
   child: const AralMapApp(),
 );
@@ -192,6 +208,71 @@ void main() {
 
       await tester.tap(find.text('Настройки'));
       expect(location.openedAppSettings, 1);
+    });
+  });
+
+  group('Search', () {
+    testWidgets('pick a result: back on the map with its card', (tester) async {
+      await tester.pumpWidget(appWith(FakeMap()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Поиск в Аральске'));
+      await tester.pumpAndSettle();
+      expect(find.text('Что найти'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), 'аптека');
+      await tester.pumpAndSettle();
+      expect(find.text('Europharma'), findsOneWidget);
+      expect(find.text('Абая'), findsNothing);
+
+      await tester.tap(find.text('Europharma'));
+      await tester.pumpAndSettle();
+
+      // Back on the map, with the place card and the attribution visible.
+      expect(find.text('Поиск в Аральске'), findsOneWidget);
+      expect(find.text('Europharma'), findsOneWidget);
+      expect(find.text('Аптека'), findsOneWidget);
+      expect(find.textContaining('OpenStreetMap contributors'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Закрыть'));
+      await tester.pumpAndSettle();
+      expect(find.text('Europharma'), findsNothing);
+    });
+
+    testWidgets('category chip fills the query', (tester) async {
+      await tester.pumpWidget(appWith(FakeMap()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Поиск в Аральске'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(ActionChip, 'Аптека'));
+      await tester.pumpAndSettle();
+      expect(find.text('Europharma'), findsOneWidget);
+    });
+
+    testWidgets('no results shows a helpful message', (tester) async {
+      await tester.pumpWidget(appWith(FakeMap()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Поиск в Аральске'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'zzzz');
+      await tester.pumpAndSettle();
+      expect(find.text('Ничего не найдено'), findsOneWidget);
+    });
+
+    testWidgets('bundled OSM data loads and parses', (tester) async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final places = await tester.runAsync(
+        () => container.read(placesProvider.future),
+      );
+      expect(places, isNotNull);
+      expect(places!.length, greaterThan(100));
+      expect(
+        places.where((p) => p.category == PlaceCategory.street),
+        isNotEmpty,
+      );
     });
   });
 

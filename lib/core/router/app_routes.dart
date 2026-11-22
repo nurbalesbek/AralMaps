@@ -4,4 +4,5 @@ abstract final class AppRoutes {
   static const favorites = '/favorites';
   static const explore = '/explore';
   static const profile = '/profile';
+  static const search = '/search';
 }

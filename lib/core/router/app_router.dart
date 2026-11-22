@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/favorites/presentation/favorites_screen.dart';
 import '../../features/map/presentation/map_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
+import '../../features/search/presentation/search_screen.dart';
 import '../../features/tourism/presentation/explore_screen.dart';
 import '../../shared/widgets/app_shell.dart';
 import 'app_routes.dart';
@@ -51,6 +52,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ],
           ),
         ],
+      ),
+      // Outside the shell: full screen, above the bottom navigation bar.
+      GoRoute(
+        path: AppRoutes.search,
+        builder: (context, state) => const SearchScreen(),
       ),
     ],
   );
