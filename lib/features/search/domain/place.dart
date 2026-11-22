@@ -114,9 +114,11 @@ class Place {
       ? category.label
       : '${category.label} · ${altNames.first}';
 
+  /// Reads both the bundled index (`ru`, `kk`) and [toJson] output (`alt`).
   factory Place.fromJson(Map<String, dynamic> json) => Place(
     name: json['n'] as String,
     altNames: [
+      if (json['alt'] case final List<dynamic> alt) ...alt.cast<String>(),
       if (json['ru'] case final String ru) ru,
       if (json['kk'] case final String kk) kk,
     ],
@@ -124,6 +126,14 @@ class Place {
     latitude: (json['la'] as num).toDouble(),
     longitude: (json['lo'] as num).toDouble(),
   );
+
+  Map<String, Object> toJson() => {
+    'n': name,
+    if (altNames.isNotEmpty) 'alt': altNames,
+    'c': category.name,
+    'la': latitude,
+    'lo': longitude,
+  };
 
   @override
   bool operator ==(Object other) =>

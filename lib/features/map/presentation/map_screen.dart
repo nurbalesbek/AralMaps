@@ -6,6 +6,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../core/router/app_routes.dart';
+import '../../favorites/presentation/favorites_controller.dart';
 import '../../location/data/location_service.dart';
 import '../../location/domain/location_result.dart';
 import '../../offline/presentation/offline_map_widgets.dart';
@@ -15,6 +16,7 @@ import '../../routing/presentation/route_panel.dart';
 import '../../routing/presentation/route_session.dart';
 import '../../search/domain/place.dart';
 import '../domain/map_config.dart';
+import 'map_focus.dart';
 import 'widgets/map_view.dart';
 
 enum _MapStatus { loading, ready, failed }
@@ -329,6 +331,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   Widget build(BuildContext context) {
     final buildMapView = ref.watch(mapViewBuilderProvider);
 
+    // "Show on map" / "Route" from another tab (Favorites).
+    ref.listen(mapFocusProvider, (_, request) {
+      if (request == null) return;
+      Future.microtask(() async {
+        ref.read(mapFocusProvider.notifier).clear();
+        await _showPlace(request.place);
+        if (request.withRoute && mounted) _startRoute(request.place);
+      });
+    });
+
     return Scaffold(
       body: Stack(
         children: [
@@ -511,7 +523,7 @@ class _MapButtons extends StatelessWidget {
   }
 }
 
-class _PlaceCard extends StatelessWidget {
+class _PlaceCard extends ConsumerWidget {
   const _PlaceCard({
     required this.place,
     required this.onClose,
@@ -522,42 +534,86 @@ class _PlaceCard extends StatelessWidget {
   final VoidCallback onClose;
   final VoidCallback onRoute;
 
+  Future<void> _toggleFavorite(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final saved = await ref.read(favoritesProvider.notifier).toggle(place);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            saved ? 'Добавлено в избранное' : 'Удалено из избранного',
+          ),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final isFavorite =
+        ref.watch(favoritesProvider).value?.contains(place) ?? false;
+
     return Card(
       elevation: 3,
       shadowColor: Colors.black26,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 4, 12),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            CircleAvatar(
-              backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
-              foregroundColor: theme.colorScheme.primary,
-              child: Icon(place.category.icon, size: 20),
+            Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: theme.colorScheme.primary.withValues(
+                    alpha: 0.1,
+                  ),
+                  foregroundColor: theme.colorScheme.primary,
+                  child: Icon(place.category.icon, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(place.name, style: theme.textTheme.titleMedium),
+                      const SizedBox(height: 2),
+                      Text(place.subtitle, style: theme.textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Закрыть',
+                  icon: const Icon(Icons.close),
+                  onPressed: onClose,
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Row(
                 children: [
-                  Text(place.name, style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 2),
-                  Text(place.subtitle, style: theme.textTheme.bodySmall),
+                  FilledButton.tonalIcon(
+                    onPressed: onRoute,
+                    icon: const Icon(Icons.directions, size: 18),
+                    label: const Text('Маршрут'),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => _toggleFavorite(context, ref),
+                    icon: Icon(
+                      isFavorite ? Icons.bookmark : Icons.bookmark_border,
+                      size: 18,
+                    ),
+                    label: Text(isFavorite ? 'В избранном' : 'Сохранить'),
+                  ),
                 ],
               ),
-            ),
-            FilledButton.tonalIcon(
-              onPressed: onRoute,
-              icon: const Icon(Icons.directions, size: 18),
-              label: const Text('Маршрут'),
-            ),
-            IconButton(
-              tooltip: 'Закрыть',
-              icon: const Icon(Icons.close),
-              onPressed: onClose,
             ),
           ],
         ),

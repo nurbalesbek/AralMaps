@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:aralmap/app.dart';
+import 'package:aralmap/features/favorites/data/favorites_repository.dart';
 import 'package:aralmap/features/offline/data/offline_map_service.dart';
 import 'package:aralmap/features/offline/presentation/offline_map_controller.dart';
 import 'package:flutter/services.dart';
@@ -122,6 +123,19 @@ String _expectedSummary(TravelMode mode) {
       '${formatDistance(r.distanceMeters)}';
 }
 
+class FakeFavoritesRepository implements FavoritesRepository {
+  FakeFavoritesRepository([List<Place> initial = const []])
+    : saved = [...initial];
+
+  List<Place> saved;
+
+  @override
+  Future<List<Place>> load() async => [...saved];
+
+  @override
+  Future<void> save(List<Place> places) async => saved = [...places];
+}
+
 class FakeOfflineMapService implements OfflineMapService {
   FakeOfflineMapService({this.stored, this.fail = false});
 
@@ -154,6 +168,7 @@ Widget appWith(
   FakeMap map, {
   LocationService? location,
   OfflineMapService? offline,
+  FavoritesRepository? favorites,
 }) => ProviderScope(
   overrides: [
     mapViewBuilderProvider.overrideWithValue(map.build),
@@ -166,6 +181,9 @@ Widget appWith(
       offline ?? FakeOfflineMapService(stored: 1024 * 1024),
     ),
     roadGraphProvider.overrideWith((ref) async => _testRoads),
+    favoritesRepositoryProvider.overrideWithValue(
+      favorites ?? FakeFavoritesRepository(),
+    ),
   ],
   child: const AralMapApp(),
 );
@@ -496,6 +514,101 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Выбрать откуда'), findsOneWidget);
+    });
+  });
+
+  group('Favorites', () {
+    Future<void> openPharmacy(WidgetTester tester) async {
+      await tester.tap(find.text('Поиск в Аральске'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'europharma');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Europharma'));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> goToFavorites(WidgetTester tester) async {
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Избранное'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('save from the place card; it is stored and listed', (
+      tester,
+    ) async {
+      final repo = FakeFavoritesRepository();
+      await tester.pumpWidget(appWith(FakeMap(), favorites: repo));
+      await tester.pumpAndSettle();
+      await openPharmacy(tester);
+
+      await tester.tap(find.text('Сохранить'));
+      await tester.pumpAndSettle();
+      expect(find.text('В избранном'), findsOneWidget);
+      expect(find.text('Добавлено в избранное'), findsOneWidget);
+      expect(repo.saved, [_pharmacy]);
+
+      await goToFavorites(tester);
+      expect(find.text('Europharma'), findsOneWidget);
+      expect(find.text('Пока пусто'), findsNothing);
+    });
+
+    testWidgets('saved places load at start; tap shows it on the map', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        appWith(FakeMap(), favorites: FakeFavoritesRepository([_pharmacy])),
+      );
+      await tester.pumpAndSettle();
+      await goToFavorites(tester);
+
+      await tester.tap(find.text('Europharma'));
+      await tester.pumpAndSettle();
+      // On the map tab, with the place card.
+      expect(find.text('Поиск в Аральске'), findsOneWidget);
+      expect(find.text('В избранном'), findsOneWidget);
+    });
+
+    testWidgets('route button in Favorites opens the route on the map', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        appWith(FakeMap(), favorites: FakeFavoritesRepository([_pharmacy])),
+      );
+      await tester.pumpAndSettle();
+      await goToFavorites(tester);
+
+      await tester.tap(find.byTooltip('Маршрут к «Europharma»'));
+      await tester.pumpAndSettle();
+      expect(find.text('Маршрут: Europharma'), findsOneWidget);
+      expect(find.text(_expectedSummary(TravelMode.walk)), findsOneWidget);
+    });
+
+    testWidgets('swipe removes, "Вернуть" restores', (tester) async {
+      final repo = FakeFavoritesRepository([_pharmacy, _street]);
+      await tester.pumpWidget(appWith(FakeMap(), favorites: repo));
+      await tester.pumpAndSettle();
+      await goToFavorites(tester);
+
+      await tester.drag(find.text('Europharma'), const Offset(-600, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('Europharma'), findsNothing);
+      expect(repo.saved, [_street]);
+
+      await tester.tap(find.text('Вернуть'));
+      await tester.pumpAndSettle();
+      expect(find.text('Europharma'), findsOneWidget);
+      expect(repo.saved, [_pharmacy, _street]); // back in its old position
+    });
+
+    testWidgets('unsave from the card', (tester) async {
+      final repo = FakeFavoritesRepository([_pharmacy]);
+      await tester.pumpWidget(appWith(FakeMap(), favorites: repo));
+      await tester.pumpAndSettle();
+      await openPharmacy(tester);
+
+      await tester.tap(find.text('В избранном'));
+      await tester.pumpAndSettle();
+      expect(find.text('Сохранить'), findsOneWidget);
+      expect(repo.saved, isEmpty);
     });
   });
 

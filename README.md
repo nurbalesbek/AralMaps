@@ -2,7 +2,7 @@
 
 Offline-first mobile map of Aral (Аральск), Kazakhstan. Flutter + MapLibre + OpenStreetMap.
 
-> Status: **Phase 6 — offline map of Aral (one-time ~14 MB download), "where am I", offline place search, offline walking and driving routes.** No turn-by-turn navigation.
+> Status: **Phase 8 — offline map of Aral (one-time ~14 MB download), "where am I", offline place search, offline walking and driving routes, favorites stored on the device.** No turn-by-turn navigation; no accounts yet.
 
 ## Requirements
 

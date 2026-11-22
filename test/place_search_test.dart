@@ -36,6 +36,14 @@ void main() {
     });
   });
 
+  test('Place survives toJson → fromJson (favorites storage)', () {
+    final p = _p('Жанар және Компания', PlaceCategory.pharmacy, [
+      'Жанар и Компания',
+    ]);
+    expect(Place.fromJson(p.toJson()), p);
+    expect(Place.fromJson(p.toJson()).altNames, ['Жанар и Компания']);
+  });
+
   group('PlaceSearch', () {
     test('empty or blank query returns nothing', () {
       expect(_names(''), isEmpty);
