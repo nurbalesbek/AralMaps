@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'dart:io';
 
@@ -16,6 +17,7 @@ import 'package:aralmap/features/routing/data/road_graph_repository.dart';
 import 'package:aralmap/features/routing/domain/road_graph.dart';
 import 'package:aralmap/features/search/data/places_repository.dart';
 import 'package:aralmap/features/search/domain/place.dart';
+import 'package:aralmap/features/tourism/data/photo_credits.dart';
 import 'package:aralmap/features/tourism/data/sights.dart';
 import 'package:aralmap/features/tourism/domain/sight.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -218,6 +220,20 @@ class FakeRemoteFavorites implements RemoteFavorites {
 
 const _alice = AppUser(id: 'user-1', email: 'alice@mail.kz');
 
+/// Credits like the real ones, without the image files (tests don't draw
+/// asset images).
+final Map<String, SightPhoto> _testPhotos = {
+  'zhalanash': (
+    asset: 'assets/photos/zhalanash.jpg',
+    credit: const PhotoCredit(
+      author: 'Zhanat Kulenov',
+      license: 'CC BY-SA 3.0 igo',
+      source: 'https://commons.wikimedia.org/wiki/File:x.jpg',
+      year: '2006',
+    ),
+  ),
+};
+
 class FakeOfflineMapService implements OfflineMapService {
   FakeOfflineMapService({this.stored, this.fail = false});
 
@@ -273,6 +289,9 @@ Widget appWith(
       auth ?? const UnavailableAuthService(),
     ),
     remoteFavoritesProvider.overrideWithValue(remote),
+    // Real credits.json is checked by its own test below; widget tests get
+    // the data synchronously.
+    sightPhotosProvider.overrideWith((ref) async => _testPhotos),
   ],
   child: const AralMapApp(),
 );
@@ -399,7 +418,8 @@ void main() {
       // Back on the map, with the place card and the attribution visible.
       expect(find.text('Поиск в Аральске'), findsOneWidget);
       expect(find.text('Europharma'), findsOneWidget);
-      expect(find.text('Аптека'), findsOneWidget);
+      // In the place card (the category chip row also says "Аптека").
+      expect(find.widgetWithText(Card, 'Аптека'), findsOneWidget);
       expect(find.textContaining('OpenStreetMap contributors'), findsOneWidget);
 
       await tester.tap(find.byTooltip('Закрыть'));
@@ -707,6 +727,27 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    /// The vertical list (the fact tiles scroll sideways inside it).
+    Finder exploreList() => find
+        .descendant(
+          of: find.byType(CustomScrollView),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+
+    Future<void> openSight(WidgetTester tester, String title) async {
+      await tester.scrollUntilVisible(
+        find.text(title),
+        200,
+        scrollable: exploreList(),
+      );
+      // Fully into view, or the bottom navigation bar catches the tap.
+      await tester.ensureVisible(find.text(title));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(title));
+      await tester.pumpAndSettle();
+    }
+
     testWidgets('lists town and nearby sights; far ones show distance', (
       tester,
     ) async {
@@ -714,10 +755,19 @@ void main() {
       await tester.pumpAndSettle();
       await openExplore(tester);
 
-      expect(find.text('В городе'), findsOneWidget);
-      expect(find.text('Вокзал и мозаика о рыбе для Поволжья'), findsOneWidget);
-      await tester.scrollUntilVisible(find.text('Кокаральская плотина'), 200);
-      expect(find.textContaining('км от Аральска по прямой'), findsWidgets);
+      expect(find.text('Аральск'), findsOneWidget); // header
+      expect(find.text('1905'), findsOneWidget); // fact tile
+      await tester.scrollUntilVisible(
+        find.text('Вокзал и мозаика о рыбе для Поволжья'),
+        200,
+        scrollable: exploreList(),
+      );
+      await tester.scrollUntilVisible(
+        find.text('Кокаральская плотина'),
+        200,
+        scrollable: exploreList(),
+      );
+      expect(find.textContaining('км'), findsWidgets); // distance badge
     });
 
     testWidgets('town sight: description, sources, route opens on the map', (
@@ -726,10 +776,12 @@ void main() {
       await tester.pumpWidget(appWith(FakeMap()));
       await tester.pumpAndSettle();
       await openExplore(tester);
+      await openSight(tester, 'Вокзал и мозаика о рыбе для Поволжья');
 
-      await tester.tap(find.text('Вокзал и мозаика о рыбе для Поволжья'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('построен в 1905 году'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.textContaining('построен в 1905 году'),
+        200,
+      );
       await tester.scrollUntilVisible(find.text('Источники'), 200);
       expect(find.text('Wikipedia: Aral, Kazakhstan'), findsOneWidget);
 
@@ -748,9 +800,12 @@ void main() {
       await tester.pumpWidget(appWith(FakeMap()));
       await tester.pumpAndSettle();
       await openExplore(tester);
+      await openSight(tester, 'Краеведческий музей');
 
-      await tester.tap(find.text('Краеведческий музей'));
-      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.textContaining('не отмечена в OpenStreetMap'),
+        200,
+      );
       expect(find.text('Показать на карте'), findsNothing);
       expect(find.text('Маршрут'), findsNothing);
       expect(
@@ -766,24 +821,48 @@ void main() {
       await tester.pumpAndSettle();
       await openExplore(tester);
 
-      // Built lazily: scroll until it exists, then fully into view (the
-      // bottom navigation bar would otherwise catch the tap).
-      await tester.scrollUntilVisible(find.textContaining('Жаланаш'), 200);
-      await tester.ensureVisible(find.textContaining('Жаланаш'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.textContaining('Жаланаш'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('разрезаны на металлолом'), findsOneWidget);
-      expect(find.text('Маршрут'), findsNothing);
+      await openSight(tester, 'Жаланаш — бывшее «кладбище кораблей»');
+      // Photo credit (2006 — the ships were mostly scrapped by 2017).
+      expect(find.textContaining('Zhanat Kulenov'), findsOneWidget);
 
+      await tester.scrollUntilVisible(
+        find.textContaining('разрезаны на металлолом'),
+        200,
+      );
+      await tester.scrollUntilVisible(find.text('Показать на карте'), 200);
       await tester.ensureVisible(find.text('Показать на карте'));
       await tester.pumpAndSettle();
+      expect(find.text('Маршрут'), findsNothing);
 
       await tester.tap(find.text('Показать на карте'));
       await tester.pumpAndSettle();
       expect(find.text('Поиск в Аральске'), findsOneWidget); // on the map
       expect(find.textContaining('Жаланаш'), findsOneWidget); // place card
     });
+  });
+
+  test('bundled photo credits: every photo has author, license, source', () {
+    final json = jsonDecode(
+      File('assets/photos/credits.json').readAsStringSync(),
+    ) as Map<String, dynamic>;
+    expect(json, isNotEmpty);
+    for (final MapEntry(:key, :value) in json.entries) {
+      final c = PhotoCredit.fromJson(value as Map<String, dynamic>);
+      expect(c.author, isNotEmpty, reason: key);
+      expect(c.license, isNotEmpty, reason: key);
+      expect(
+        c.source,
+        startsWith('https://commons.wikimedia.org/'),
+        reason: key,
+      );
+      expect(File('assets/photos/$key.jpg').existsSync(), isTrue, reason: key);
+      expect(sights.any((s) => s.id == key), isTrue, reason: '$key: no sight');
+    }
+    // The satellite image needs its Copernicus credit line.
+    final kokaral = PhotoCredit.fromJson(
+      json['kokaral-dam'] as Map<String, dynamic>,
+    );
+    expect(kokaral.line, contains('Copernicus'));
   });
 
   test('every sight has sources, and map positions are near Aral', () {

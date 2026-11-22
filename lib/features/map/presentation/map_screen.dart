@@ -6,6 +6,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../core/router/app_routes.dart';
+import '../../../shared/widgets/category_avatar.dart';
 import '../../favorites/presentation/favorites_controller.dart';
 import '../../location/data/location_service.dart';
 import '../../location/domain/location_result.dart';
@@ -14,7 +15,9 @@ import '../../routing/data/road_graph_repository.dart';
 import '../../routing/domain/road_graph.dart';
 import '../../routing/presentation/route_panel.dart';
 import '../../routing/presentation/route_session.dart';
+import '../../search/data/places_repository.dart';
 import '../../search/domain/place.dart';
+import '../../tourism/data/sights.dart';
 import '../domain/map_config.dart';
 import 'map_focus.dart';
 import 'widgets/map_view.dart';
@@ -185,6 +188,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   // ---- Places -------------------------------------------------------------
 
+  Future<void> _openCategory(PlaceCategory category) async {
+    final place = await context.push<Place>(
+      AppRoutes.searchFor(category.label),
+    );
+    if (place != null && mounted) await _showPlace(place);
+  }
+
   Future<void> _showPlace(Place place, {double? zoom}) async {
     if (_route != null) await _closeRoute();
     setState(() => _selectedPlace = place);
@@ -198,9 +208,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     _placeMarker = await controller.addCircle(
       CircleOptions(
         geometry: position,
-        circleRadius: 9,
-        circleColor: '#287E72',
-        circleStrokeWidth: 3,
+        circleRadius: 11,
+        circleColor: place.category.colorHex,
+        circleStrokeWidth: 4,
         circleStrokeColor: '#FFFFFF',
       ),
     );
@@ -307,9 +317,49 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   void _onStyleLoaded() {
     _loadTimeout?.cancel();
     if (mounted) setState(() => _status = _MapStatus.ready);
+    _addPlaceDots();
+  }
+
+  /// Circle id → place, for taps on the coloured dots.
+  final Map<String, Place> _dotPlaces = {};
+
+  /// Every named point of the town (cafés, pharmacies, schools…) and the
+  /// located sights of the Explore tab, as dots in their category colour.
+  Future<void> _addPlaceDots() async {
+    final controller = _controller;
+    if (controller == null) return;
+    final places = await ref.read(placesProvider.future);
+    final dots = [
+      for (final p in places)
+        if (p.category.showOnMap) p,
+      for (final s in sights)
+        if (s.hasLocation) s.toPlace(),
+    ];
+    if (!mounted || controller != _controller) return;
+    final circles = await controller.addCircles([
+      for (final p in dots)
+        CircleOptions(
+          geometry: LatLng(p.latitude, p.longitude),
+          circleRadius: p.category == PlaceCategory.sight ? 8 : 6,
+          circleColor: p.category.colorHex,
+          circleStrokeWidth: 2,
+          circleStrokeColor: '#FFFFFF',
+        ),
+    ]);
+    _dotPlaces.clear();
+    for (final (i, c) in circles.indexed) {
+      _dotPlaces[c.id] = dots[i];
+    }
+    controller.onCircleTapped.add(_onDotTapped);
+  }
+
+  void _onDotTapped(Circle circle) {
+    final place = _dotPlaces[circle.id];
+    if (place != null) _showPlace(place);
   }
 
   void _retry() {
+    _dotPlaces.clear();
     setState(() {
       _controller = null;
       _placeMarker = null; // belonged to the discarded native map
@@ -381,6 +431,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _SearchBar(onTap: _openSearch),
+                  const SizedBox(height: 8),
+                  _CategoryChips(onSelected: _openCategory),
                   if (!_offlineBannerDismissed)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
@@ -483,6 +535,49 @@ class _SearchBar extends StatelessWidget {
   }
 }
 
+/// Quick categories under the search bar, in their map colours.
+class _CategoryChips extends StatelessWidget {
+  const _CategoryChips({required this.onSelected});
+
+  final ValueChanged<PlaceCategory> onSelected;
+
+  static const _categories = [
+    PlaceCategory.food,
+    PlaceCategory.grocery,
+    PlaceCategory.pharmacy,
+    PlaceCategory.health,
+    PlaceCategory.transport,
+    PlaceCategory.lodging,
+    PlaceCategory.fuel,
+    PlaceCategory.finance,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 40,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: _categories.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, i) {
+          final c = _categories[i];
+          return ActionChip(
+            avatar: Icon(c.icon, size: 18, color: c.color),
+            label: Text(c.label),
+            backgroundColor: Theme.of(context).colorScheme.surface,
+            elevation: 2,
+            shadowColor: Colors.black26,
+            side: BorderSide.none,
+            shape: const StadiumBorder(),
+            onPressed: () => onSelected(c),
+          );
+        },
+      ),
+    );
+  }
+}
+
 class _MapButtons extends StatelessWidget {
   const _MapButtons({
     required this.locating,
@@ -567,13 +662,7 @@ class _PlaceCard extends ConsumerWidget {
           children: [
             Row(
               children: [
-                CircleAvatar(
-                  backgroundColor: theme.colorScheme.primary.withValues(
-                    alpha: 0.1,
-                  ),
-                  foregroundColor: theme.colorScheme.primary,
-                  child: Icon(place.category.icon, size: 20),
-                ),
+                CategoryAvatar(place.category),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(

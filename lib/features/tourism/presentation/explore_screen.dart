@@ -6,6 +6,16 @@ import '../../map/domain/map_config.dart';
 import '../../routing/domain/road_graph.dart';
 import '../data/sights.dart';
 import '../domain/sight.dart';
+import 'sight_visuals.dart';
+
+/// Facts shown as coloured tiles. Each one is stated in the sources of the
+/// sights it belongs to (see sights.dart); ranges where sources differ.
+const _facts = [
+  ('1905', 'построен вокзал Аральска', Color(0xFF287E72)),
+  ('≈100 км', 'так далеко от города отступало море', Color(0xFFB7791F)),
+  ('2005', 'достроена Кокаральская плотина', Color(0xFF1F6F9F)),
+  ('12–20 км', 'до воды сейчас (оценки 2015–2018)', Color(0xFFC0392B)),
+];
 
 class ExploreScreen extends StatelessWidget {
   const ExploreScreen({super.key});
@@ -13,31 +23,105 @@ class ExploreScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final heroSight = sights.firstWhere(
+      (s) => s.id == 'harbour-fishermen-museum',
+    );
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Обзор')),
-      body: ListView(
-        padding: const EdgeInsets.only(bottom: 24),
-        children: [
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            pinned: true,
+            expandedHeight: 240,
+            backgroundColor: theme.colorScheme.primary,
+            foregroundColor: Colors.white,
+            title: const Text('Обзор'),
+            flexibleSpace: FlexibleSpaceBar(
+              collapseMode: CollapseMode.parallax,
+              background: Stack(
+                fit: StackFit.expand,
+                children: [
+                  SightCover(sight: heroSight),
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Color(0x66000000),
+                          Color(0x00000000),
+                          Color(0xCC000000),
+                        ],
+                        stops: [0, 0.4, 1],
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 20,
+                    right: 20,
+                    bottom: 20,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Аральск',
+                          style: theme.textTheme.headlineMedium?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          'Бывший порт Аральского моря',
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: Colors.white.withValues(alpha: 0.9),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: PhotoCreditLine(sightId: heroSight.id),
+              ),
+            ),
+          ),
+          const SliverToBoxAdapter(child: _FactTiles()),
           for (final area in SightArea.values) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Text(
-                area.label,
-                style: theme.textTheme.labelLarge?.copyWith(
-                  color: theme.colorScheme.primary,
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+                child: Text(area.label, style: theme.textTheme.titleLarge),
+              ),
+            ),
+            SliverList.separated(
+              itemCount: sights.where((s) => s.area == area).length,
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
+              itemBuilder: (context, i) => Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _SightCard(
+                  sight: sights.where((s) => s.area == area).elementAt(i),
                 ),
               ),
             ),
-            for (final sight in sights.where((s) => s.area == area))
-              _SightTile(sight: sight),
           ],
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
-            child: Text(
-              'Описания составлены по открытым источникам, ссылки — на '
-              'странице каждого места. Часы работы и состояние мест меняются: '
-              'уточняйте на месте.',
-              style: theme.textTheme.bodySmall,
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
+              child: Text(
+                'Описания составлены по открытым источникам, ссылки — на '
+                'странице каждого места. Фото — Wikimedia Commons, авторы '
+                'указаны под снимками. Часы работы и состояние мест меняются: '
+                'уточняйте на месте.',
+                style: theme.textTheme.bodySmall,
+              ),
             ),
           ),
         ],
@@ -46,8 +130,60 @@ class ExploreScreen extends StatelessWidget {
   }
 }
 
-class _SightTile extends StatelessWidget {
-  const _SightTile({required this.sight});
+class _FactTiles extends StatelessWidget {
+  const _FactTiles();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    // No fixed height: the row grows with the text, so large system font
+    // sizes don't cut the facts off.
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final (i, (value, text, color)) in _facts.indexed) ...[
+              if (i > 0) const SizedBox(width: 10),
+              Container(
+                width: 150,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      value,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      text,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.92),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SightCard extends StatelessWidget {
+  const _SightCard({required this.sight});
 
   final Sight sight;
 
@@ -55,21 +191,91 @@ class _SightTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final distance = sightDistanceText(sight);
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
-        foregroundColor: theme.colorScheme.primary,
-        child: Icon(sight.icon, size: 20),
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => context.go(AppRoutes.sight(sight.id)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              height: 150,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  SightCover(sight: sight),
+                  if (distance != null)
+                    Positioned(
+                      left: 10,
+                      top: 10,
+                      child: _Badge(
+                        icon: Icons.near_me_outlined,
+                        text: distance.replaceFirst(
+                          ' от Аральска по прямой',
+                          '',
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 4,
+                    height: 40,
+                    margin: const EdgeInsets.only(right: 10, top: 2),
+                    decoration: BoxDecoration(
+                      color: sightColor(sight),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(sight.title, style: theme.textTheme.titleMedium),
+                        const SizedBox(height: 4),
+                        Text(sight.summary, style: theme.textTheme.bodySmall),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
-      title: Text(sight.title),
-      subtitle: Text(
-        distance == null ? sight.summary : '${sight.summary}\n$distance',
-      ),
-      isThreeLine: distance != null,
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () => context.go(AppRoutes.sight(sight.id)),
     );
   }
+}
+
+class _Badge extends StatelessWidget {
+  const _Badge({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: Colors.black.withValues(alpha: 0.6),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: Colors.white),
+        const SizedBox(width: 4),
+        Text(text, style: const TextStyle(color: Colors.white, fontSize: 12)),
+      ],
+    ),
+  );
 }
 
 /// "≈ 103 км от Аральска по прямой" for sights outside the town.

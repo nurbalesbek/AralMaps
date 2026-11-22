@@ -88,6 +88,34 @@ enum PlaceCategory {
     (c) => c.name == id,
     orElse: () => PlaceCategory.other,
   );
+
+  /// Category colour for avatars and map markers. Dark enough that a white
+  /// icon on it stays readable (≥ 3:1).
+  Color get color => Color(colorValue);
+
+  int get colorValue => switch (this) {
+    food => 0xFFD35400, // orange
+    grocery || shop || market => 0xFF8E44AD, // purple
+    pharmacy => 0xFF1E8449, // green
+    health || emergency => 0xFFC0392B, // red
+    education => 0xFF2471A3, // blue
+    transport => 0xFF34495E, // slate
+    fuel => 0xFFA04000, // rust
+    lodging => 0xFFAD1457, // magenta
+    sight => 0xFFB7791F, // amber
+    park || leisure => 0xFF388E3C, // leaf green
+    religion => 0xFF00796B, // teal
+    finance => 0xFF6D4C41, // brown
+    government || post => 0xFF455A64, // blue grey
+    street || district || other => 0xFF607D8B, // grey
+  };
+
+  /// "#RRGGBB" for MapLibre.
+  String get colorHex =>
+      '#${(colorValue & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
+
+  /// Shown as dots on the map (streets and districts are not points).
+  bool get showOnMap => this != street && this != district;
 }
 
 @immutable

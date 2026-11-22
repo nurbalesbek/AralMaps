@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../core/router/app_routes.dart';
+import '../../../shared/widgets/category_avatar.dart';
 import '../../../shared/widgets/not_implemented_view.dart';
 import '../../map/presentation/map_focus.dart';
 import '../../search/domain/place.dart';
@@ -89,11 +90,7 @@ class _FavoritesList extends ConsumerWidget {
           ),
           onDismissed: (_) => _remove(context, ref, place),
           child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
-              foregroundColor: theme.colorScheme.primary,
-              child: Icon(place.category.icon, size: 20),
-            ),
+            leading: CategoryAvatar(place.category),
             title: Text(place.name),
             subtitle: Text(place.subtitle),
             onTap: () => _openOnMap(context, ref, place, false),

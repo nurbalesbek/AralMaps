@@ -8,6 +8,7 @@ import '../../map/presentation/map_focus.dart';
 import '../data/sights.dart';
 import '../domain/sight.dart';
 import 'explore_screen.dart';
+import 'sight_visuals.dart';
 
 class SightScreen extends ConsumerWidget {
   const SightScreen({super.key, required this.sightId});
@@ -64,14 +65,21 @@ class SightScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: SizedBox(
+              height: 210,
+              child: SightCover(sight: sight, iconSize: 72),
+            ),
+          ),
+          PhotoCreditLine(sightId: sight.id),
+          const SizedBox(height: 8),
           Row(
             children: [
               CircleAvatar(
                 radius: 24,
-                backgroundColor: theme.colorScheme.primary.withValues(
-                  alpha: 0.1,
-                ),
-                foregroundColor: theme.colorScheme.primary,
+                backgroundColor: sightColor(sight),
+                foregroundColor: Colors.white,
                 child: Icon(sight.icon),
               ),
               const SizedBox(width: 12),

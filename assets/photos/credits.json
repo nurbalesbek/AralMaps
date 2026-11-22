@@ -1,0 +1,38 @@
+{
+  "harbour-fishermen-museum": {
+    "file": "File:Aral harbour.jpg",
+    "author": "Yorian",
+    "credit": "",
+    "license": "CC BY-SA 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Aral_harbour.jpg",
+    "date": "2009-08-13"
+  },
+  "zhalanash": {
+    "file": "File:The Aral sea is drying up. Bay of Zhalanash, Ship Cemetery, Aralsk, Kazakhstan.jpg",
+    "author": "Zhanat Kulenov",
+    "credit": "",
+    "license": "CC BY-SA 3.0 igo",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/igo/deed.en",
+    "source": "https://commons.wikimedia.org/wiki/File:The_Aral_sea_is_drying_up._Bay_of_Zhalanash,_Ship_Cemetery,_Aralsk,_Kazakhstan.jpg",
+    "date": "2006-04-11 08:55:36"
+  },
+  "north-aral-sea": {
+    "file": "File:Aerial view of North Aral Sea in 2013 (1).jpg",
+    "author": "Obakeneko",
+    "credit": "",
+    "license": "CC BY 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/3.0",
+    "source": "https://commons.wikimedia.org/wiki/File:Aerial_view_of_North_Aral_Sea_in_2013_(1).jpg",
+    "date": "2013-10-06"
+  },
+  "kokaral-dam": {
+    "file": "File:Dike Kokaral 2021-07-20 Sentinel-2 L2A True color.jpg",
+    "author": "European Space Agency",
+    "credit": "Contains modified Copernicus Sentinel data 2021",
+    "license": "Attribution",
+    "licenseUrl": "",
+    "source": "https://commons.wikimedia.org/wiki/File:Dike_Kokaral_2021-07-20_Sentinel-2_L2A_True_color.jpg",
+    "date": "2021-07-20"
+  }
+}

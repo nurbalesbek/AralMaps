@@ -66,7 +66,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.search,
         // `extra` (optional): hint text, e.g. when picking a route origin.
-        builder: (context, state) => SearchScreen(hint: state.extra as String?),
+        builder: (context, state) => SearchScreen(
+          hint: state.extra as String?,
+          initialQuery: state.uri.queryParameters['q'],
+        ),
       ),
       GoRoute(
         path: AppRoutes.signIn,

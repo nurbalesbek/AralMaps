@@ -2,15 +2,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../../shared/widgets/category_avatar.dart';
 import '../data/places_repository.dart';
 import '../domain/place.dart';
 
 /// Full-screen place search. Pops with the chosen [Place], or null.
 class SearchScreen extends ConsumerStatefulWidget {
-  const SearchScreen({super.key, this.hint});
+  const SearchScreen({super.key, this.hint, this.initialQuery});
 
   /// Placeholder text; defaults to examples of what can be found.
   final String? hint;
+
+  /// Pre-filled query (from a category chip on the map).
+  final String? initialQuery;
 
   @override
   ConsumerState<SearchScreen> createState() => _SearchScreenState();
@@ -30,6 +34,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     PlaceCategory.finance,
     PlaceCategory.fuel,
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    final q = widget.initialQuery;
+    if (q != null && q.isNotEmpty) {
+      _controller.text = q;
+      _query = q;
+    }
+  }
 
   @override
   void dispose() {
@@ -137,7 +151,6 @@ class _Results extends StatelessWidget {
             'отмеченные в OpenStreetMap.',
       );
     }
-    final theme = Theme.of(context);
     return ListView.separated(
       itemCount: results.length + 1,
       separatorBuilder: (_, _) => const Divider(height: 1, indent: 72),
@@ -147,11 +160,7 @@ class _Results extends StatelessWidget {
         }
         final place = results[i];
         return ListTile(
-          leading: CircleAvatar(
-            backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
-            foregroundColor: theme.colorScheme.primary,
-            child: Icon(place.category.icon, size: 20),
-          ),
+          leading: CategoryAvatar(place.category),
           title: Text(place.name),
           subtitle: Text(place.subtitle),
           onTap: () => context.pop(place),
