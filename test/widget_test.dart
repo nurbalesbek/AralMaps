@@ -7,6 +7,8 @@ import 'package:flutter/services.dart';
 import 'package:aralmap/features/location/data/location_service.dart';
 import 'package:aralmap/features/location/domain/location_result.dart';
 import 'package:aralmap/features/map/presentation/widgets/map_view.dart';
+import 'package:aralmap/features/routing/data/road_graph_repository.dart';
+import 'package:aralmap/features/routing/domain/road_graph.dart';
 import 'package:aralmap/features/search/data/places_repository.dart';
 import 'package:aralmap/features/search/domain/place.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -103,6 +105,23 @@ const _street = Place(
   longitude: 61.67,
 );
 
+/// One street from "Абая" / the test location (46.8, 61.67) to the
+/// pharmacy (46.79, 61.66).
+final _testRoads = RoadGraph.fromEncoded(
+  vertices: [4680000, 6167000, -1000, -1000], // delta-encoded
+  edges: [0, 1, 1 | 2 | 4, 6], // walk + car both ways, residential
+);
+
+String _expectedSummary(TravelMode mode) {
+  final r = _testRoads.route(
+    (lat: 46.8, lon: 61.67),
+    (lat: 46.79, lon: 61.66),
+    mode,
+  ) as RouteFound;
+  return '${formatDuration(r.durationSeconds)} · '
+      '${formatDistance(r.distanceMeters)}';
+}
+
 class FakeOfflineMapService implements OfflineMapService {
   FakeOfflineMapService({this.stored, this.fail = false});
 
@@ -146,6 +165,7 @@ Widget appWith(
     offlineMapServiceProvider.overrideWithValue(
       offline ?? FakeOfflineMapService(stored: 1024 * 1024),
     ),
+    roadGraphProvider.overrideWith((ref) async => _testRoads),
   ],
   child: const AralMapApp(),
 );
@@ -388,6 +408,94 @@ void main() {
       await tester.pumpAndSettle();
       expect(offline.stored, isNull);
       expect(find.textContaining('Не скачана'), findsOneWidget);
+    });
+  });
+
+  group('Route', () {
+    Future<void> openPharmacy(WidgetTester tester) async {
+      await tester.tap(find.text('Поиск в Аральске'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'europharma');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Europharma'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('from my location: walk, then drive, then close', (
+      tester,
+    ) async {
+      await tester.pumpWidget(appWith(FakeMap()));
+      await tester.pumpAndSettle();
+      await openPharmacy(tester);
+
+      await tester.tap(find.text('Маршрут'));
+      await tester.pumpAndSettle();
+      expect(find.text('Маршрут: Europharma'), findsOneWidget);
+      expect(find.text('Моё местоположение'), findsOneWidget);
+      expect(find.text(_expectedSummary(TravelMode.walk)), findsOneWidget);
+
+      await tester.tap(find.text('На машине'));
+      await tester.pumpAndSettle();
+      expect(find.text(_expectedSummary(TravelMode.drive)), findsOneWidget);
+      expect(find.textContaining('без учёта пробок'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Закрыть маршрут'));
+      await tester.pumpAndSettle();
+      expect(find.text('Маршрут: Europharma'), findsNothing);
+      expect(find.text('Europharma'), findsOneWidget); // place card again
+      // Attribution never disappears.
+      expect(find.textContaining('OpenStreetMap contributors'), findsOneWidget);
+    });
+
+    testWidgets('far from Aral: explains, then routes from a chosen place', (
+      tester,
+    ) async {
+      final inAlmaty = FakeLocationService(
+        result: const LocationFound(
+          latitude: 43.24,
+          longitude: 76.89,
+          accuracyMeters: 10,
+        ),
+      );
+      await tester.pumpWidget(appWith(FakeMap(), location: inAlmaty));
+      await tester.pumpAndSettle();
+      await openPharmacy(tester);
+
+      await tester.tap(find.text('Маршрут'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('км от Аральска'), findsOneWidget);
+
+      await tester.tap(find.text('Выбрать откуда'));
+      await tester.pumpAndSettle();
+      expect(find.text('Откуда идти?'), findsOneWidget); // search hint
+
+      await tester.enterText(find.byType(TextField), 'абая');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Абая'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Маршрут: Europharma'), findsOneWidget);
+      expect(find.text(_expectedSummary(TravelMode.walk)), findsOneWidget);
+      expect(find.byTooltip('От моего местоположения'), findsOneWidget);
+    });
+
+    testWidgets('location unavailable: offers to choose the origin', (
+      tester,
+    ) async {
+      final noGps = FakeLocationService(
+        result: const LocationFailed(LocationFailure.serviceDisabled),
+      );
+      await tester.pumpWidget(appWith(FakeMap(), location: noGps));
+      await tester.pumpAndSettle();
+      await openPharmacy(tester);
+
+      await tester.tap(find.text('Маршрут'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Не удалось определить, где вы'),
+        findsOneWidget,
+      );
+      expect(find.text('Выбрать откуда'), findsOneWidget);
     });
   });
 

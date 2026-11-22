@@ -9,6 +9,10 @@ import '../../../core/router/app_routes.dart';
 import '../../location/data/location_service.dart';
 import '../../location/domain/location_result.dart';
 import '../../offline/presentation/offline_map_widgets.dart';
+import '../../routing/data/road_graph_repository.dart';
+import '../../routing/domain/road_graph.dart';
+import '../../routing/presentation/route_panel.dart';
+import '../../routing/presentation/route_session.dart';
 import '../../search/domain/place.dart';
 import '../domain/map_config.dart';
 import 'widgets/map_view.dart';
@@ -49,7 +53,138 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     if (place != null && mounted) await _showPlace(place);
   }
 
+  // ---- Routing -----------------------------------------------------------
+
+  RouteSession? _route;
+  Line? _routeLine;
+
+  /// Bumped on every calculation, so a slow one (waiting for GPS) cannot
+  /// overwrite a newer one (e.g. after switching mode).
+  int _routeRequest = 0;
+
+  /// Last position from "my location" during this route, so switching the
+  /// mode does not wait for GPS again.
+  GeoPoint? _routeFromCache;
+
+  void _startRoute(Place destination) {
+    _routeFromCache = null;
+    _computeRoute(RouteSession(destination: destination).computingWith());
+  }
+
+  Future<void> _computeRoute(RouteSession session) async {
+    final request = ++_routeRequest;
+    setState(() => _route = session);
+    await _removeRouteLine();
+
+    GeoPoint? from;
+    switch (session.origin) {
+      case FromPlace(:final place):
+        from = (lat: place.latitude, lon: place.longitude);
+      case FromMyLocation():
+        from = _routeFromCache;
+        if (from == null) {
+          final service = ref.read(locationServiceProvider);
+          final located = await service.locate();
+          if (!mounted || request != _routeRequest) return;
+          switch (located) {
+            case LocationFound(:final latitude, :final longitude):
+              from = (lat: latitude, lon: longitude);
+              _routeFromCache = from;
+              setState(() => _myLocationEnabled = true);
+            case LocationFailed(:final reason):
+              _showLocationError(reason, service);
+              setState(() => _route = session.withLocationFailed());
+              return;
+          }
+        }
+    }
+
+    final graph = await ref.read(roadGraphProvider.future);
+    if (!mounted || request != _routeRequest) return;
+    final destination = session.destination;
+    final result = graph.route(from, (
+      lat: destination.latitude,
+      lon: destination.longitude,
+    ), session.mode);
+    setState(() => _route = session.withResult(result));
+    if (result is RouteFound) await _drawRoute(result);
+  }
+
+  Future<void> _drawRoute(RouteFound route) async {
+    final controller = _controller;
+    if (controller == null) return;
+    final points = [for (final p in route.points) LatLng(p.lat, p.lon)];
+    _routeLine = await controller.addLine(
+      LineOptions(
+        geometry: points,
+        lineColor: '#287E72',
+        lineWidth: 6,
+        lineOpacity: 0.9,
+        lineJoin: 'round',
+      ),
+    );
+    var south = points.first.latitude, north = south;
+    var west = points.first.longitude, east = west;
+    for (final p in points) {
+      if (p.latitude < south) south = p.latitude;
+      if (p.latitude > north) north = p.latitude;
+      if (p.longitude < west) west = p.longitude;
+      if (p.longitude > east) east = p.longitude;
+    }
+    await controller.animateCamera(
+      CameraUpdate.newLatLngBounds(
+        LatLngBounds(
+          southwest: LatLng(south, west),
+          northeast: LatLng(north, east),
+        ),
+        // Keep the line clear of the search bar and the route panel.
+        left: 40,
+        right: 40,
+        top: 140,
+        bottom: 340,
+      ),
+      duration: const Duration(milliseconds: 600),
+    );
+  }
+
+  Future<void> _removeRouteLine() async {
+    final line = _routeLine;
+    _routeLine = null;
+    if (line != null) await _controller?.removeLine(line);
+  }
+
+  Future<void> _closeRoute() async {
+    _routeRequest++; // cancel anything in flight
+    setState(() => _route = null);
+    await _removeRouteLine();
+  }
+
+  void _changeRouteMode(TravelMode mode) {
+    final route = _route;
+    if (route != null) _computeRoute(route.computingWith(mode: mode));
+  }
+
+  Future<void> _chooseRouteOrigin() async {
+    final place = await context.push<Place>(
+      AppRoutes.search,
+      extra: 'Откуда идти?',
+    );
+    final route = _route;
+    if (place == null || route == null || !mounted) return;
+    await _computeRoute(route.computingWith(origin: FromPlace(place)));
+  }
+
+  void _routeFromMyLocation() {
+    final route = _route;
+    if (route != null) {
+      _computeRoute(route.computingWith(origin: const FromMyLocation()));
+    }
+  }
+
+  // ---- Places -------------------------------------------------------------
+
   Future<void> _showPlace(Place place) async {
+    if (_route != null) await _closeRoute();
     setState(() => _selectedPlace = place);
     final controller = _controller;
     if (controller == null) return;
@@ -176,6 +311,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     setState(() {
       _controller = null;
       _placeMarker = null; // belonged to the discarded native map
+      _routeLine = null;
       _status = _MapStatus.loading;
       _mapKey = UniqueKey();
     });
@@ -265,10 +401,25 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       ),
                     ),
                   ),
-                if (_selectedPlace case final place?)
+                if (_route case final route?)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                    child: _PlaceCard(place: place, onClose: _clearPlace),
+                    child: RoutePanel(
+                      session: route,
+                      onClose: _closeRoute,
+                      onModeChanged: _changeRouteMode,
+                      onChooseOrigin: _chooseRouteOrigin,
+                      onUseMyLocation: _routeFromMyLocation,
+                    ),
+                  )
+                else if (_selectedPlace case final place?)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                    child: _PlaceCard(
+                      place: place,
+                      onClose: _clearPlace,
+                      onRoute: () => _startRoute(place),
+                    ),
                   ),
                 const _Attribution(),
               ],
@@ -361,10 +512,15 @@ class _MapButtons extends StatelessWidget {
 }
 
 class _PlaceCard extends StatelessWidget {
-  const _PlaceCard({required this.place, required this.onClose});
+  const _PlaceCard({
+    required this.place,
+    required this.onClose,
+    required this.onRoute,
+  });
 
   final Place place;
   final VoidCallback onClose;
+  final VoidCallback onRoute;
 
   @override
   Widget build(BuildContext context) {
@@ -392,6 +548,11 @@ class _PlaceCard extends StatelessWidget {
                   Text(place.subtitle, style: theme.textTheme.bodySmall),
                 ],
               ),
+            ),
+            FilledButton.tonalIcon(
+              onPressed: onRoute,
+              icon: const Icon(Icons.directions, size: 18),
+              label: const Text('Маршрут'),
             ),
             IconButton(
               tooltip: 'Закрыть',

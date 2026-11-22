@@ -7,7 +7,10 @@ import '../domain/place.dart';
 
 /// Full-screen place search. Pops with the chosen [Place], or null.
 class SearchScreen extends ConsumerStatefulWidget {
-  const SearchScreen({super.key});
+  const SearchScreen({super.key, this.hint});
+
+  /// Placeholder text; defaults to examples of what can be found.
+  final String? hint;
 
   @override
   ConsumerState<SearchScreen> createState() => _SearchScreenState();
@@ -53,8 +56,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           controller: _controller,
           autofocus: true,
           textInputAction: TextInputAction.search,
-          decoration: const InputDecoration(
-            hintText: 'Улица, аптека, школа…',
+          decoration: InputDecoration(
+            hintText: widget.hint ?? 'Улица, аптека, школа…',
             border: InputBorder.none,
           ),
           onChanged: (text) => setState(() => _query = text),

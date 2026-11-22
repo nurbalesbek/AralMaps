@@ -56,7 +56,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // Outside the shell: full screen, above the bottom navigation bar.
       GoRoute(
         path: AppRoutes.search,
-        builder: (context, state) => const SearchScreen(),
+        // `extra` (optional): hint text, e.g. when picking a route origin.
+        builder: (context, state) => SearchScreen(hint: state.extra as String?),
       ),
     ],
   );
