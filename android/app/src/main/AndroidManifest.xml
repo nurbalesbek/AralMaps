@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Map tiles are downloaded from the internet (until offline maps). -->
+    <!-- Map tiles: online, and the one-time offline map download. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- "Where am I" button; asked for only when the user taps it. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
@@ -45,6 +45,11 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- Open source links of sights in the browser (url_launcher). -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
         </intent>
     </queries>
 </manifest>

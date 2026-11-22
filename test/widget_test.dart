@@ -12,6 +12,8 @@ import 'package:aralmap/features/routing/data/road_graph_repository.dart';
 import 'package:aralmap/features/routing/domain/road_graph.dart';
 import 'package:aralmap/features/search/data/places_repository.dart';
 import 'package:aralmap/features/search/domain/place.dart';
+import 'package:aralmap/features/tourism/data/sights.dart';
+import 'package:aralmap/features/tourism/domain/sight.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -610,6 +612,107 @@ void main() {
       expect(find.text('Сохранить'), findsOneWidget);
       expect(repo.saved, isEmpty);
     });
+  });
+
+  group('Explore', () {
+    Future<void> openExplore(WidgetTester tester) async {
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Обзор'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('lists town and nearby sights; far ones show distance', (
+      tester,
+    ) async {
+      await tester.pumpWidget(appWith(FakeMap()));
+      await tester.pumpAndSettle();
+      await openExplore(tester);
+
+      expect(find.text('В городе'), findsOneWidget);
+      expect(find.text('Вокзал и мозаика о рыбе для Поволжья'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('Кокаральская плотина'), 200);
+      expect(find.textContaining('км от Аральска по прямой'), findsWidgets);
+    });
+
+    testWidgets('town sight: description, sources, route opens on the map', (
+      tester,
+    ) async {
+      await tester.pumpWidget(appWith(FakeMap()));
+      await tester.pumpAndSettle();
+      await openExplore(tester);
+
+      await tester.tap(find.text('Вокзал и мозаика о рыбе для Поволжья'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('построен в 1905 году'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('Источники'), 200);
+      expect(find.text('Wikipedia: Aral, Kazakhstan'), findsOneWidget);
+
+      await tester.scrollUntilVisible(find.text('Маршрут'), -200);
+      await tester.tap(find.text('Маршрут'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Маршрут: Вокзал и мозаика о рыбе для Поволжья'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('sight without a known position offers no map buttons', (
+      tester,
+    ) async {
+      await tester.pumpWidget(appWith(FakeMap()));
+      await tester.pumpAndSettle();
+      await openExplore(tester);
+
+      await tester.tap(find.text('Краеведческий музей'));
+      await tester.pumpAndSettle();
+      expect(find.text('Показать на карте'), findsNothing);
+      expect(find.text('Маршрут'), findsNothing);
+      expect(
+        find.textContaining('не отмечена в OpenStreetMap'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('nearby sight: map yes, route no (roads cover only town)', (
+      tester,
+    ) async {
+      await tester.pumpWidget(appWith(FakeMap()));
+      await tester.pumpAndSettle();
+      await openExplore(tester);
+
+      // Built lazily: scroll until it exists, then fully into view (the
+      // bottom navigation bar would otherwise catch the tap).
+      await tester.scrollUntilVisible(find.textContaining('Жаланаш'), 200);
+      await tester.ensureVisible(find.textContaining('Жаланаш'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Жаланаш'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('разрезаны на металлолом'), findsOneWidget);
+      expect(find.text('Маршрут'), findsNothing);
+
+      await tester.ensureVisible(find.text('Показать на карте'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Показать на карте'));
+      await tester.pumpAndSettle();
+      expect(find.text('Поиск в Аральске'), findsOneWidget); // on the map
+      expect(find.textContaining('Жаланаш'), findsOneWidget); // place card
+    });
+  });
+
+  test('every sight has sources, and map positions are near Aral', () {
+    for (final s in sights) {
+      expect(s.sources, isNotEmpty, reason: s.id);
+      if (s.hasLocation) {
+        final km =
+            distanceMeters(
+              (lat: 46.8, lon: 61.667),
+              (lat: s.latitude!, lon: s.longitude!),
+            ) /
+            1000;
+        expect(km, lessThan(s.area == SightArea.town ? 5 : 150), reason: s.id);
+      }
+    }
+    expect(sights.map((s) => s.id).toSet().length, sights.length);
   });
 
   testWidgets('Switching tabs works', (tester) async {

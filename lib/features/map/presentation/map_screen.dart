@@ -185,7 +185,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   // ---- Places -------------------------------------------------------------
 
-  Future<void> _showPlace(Place place) async {
+  Future<void> _showPlace(Place place, {double? zoom}) async {
     if (_route != null) await _closeRoute();
     setState(() => _selectedPlace = place);
     final controller = _controller;
@@ -205,7 +205,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       ),
     );
     await controller.animateCamera(
-      CameraUpdate.newLatLngZoom(position, _placeZoom),
+      CameraUpdate.newLatLngZoom(position, zoom ?? _placeZoom),
       duration: const Duration(milliseconds: 600),
     );
   }
@@ -336,7 +336,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       if (request == null) return;
       Future.microtask(() async {
         ref.read(mapFocusProvider.notifier).clear();
-        await _showPlace(request.place);
+        await _showPlace(request.place, zoom: request.zoom);
         if (request.withRoute && mounted) _startRoute(request.place);
       });
     });

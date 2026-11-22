@@ -6,6 +6,7 @@ import '../../features/map/presentation/map_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/search/presentation/search_screen.dart';
 import '../../features/tourism/presentation/explore_screen.dart';
+import '../../features/tourism/presentation/sight_screen.dart';
 import '../../shared/widgets/app_shell.dart';
 import 'app_routes.dart';
 
@@ -40,6 +41,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: AppRoutes.explore,
                 builder: (context, state) => const ExploreScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'sight/:id',
+                    builder: (context, state) =>
+                        SightScreen(sightId: state.pathParameters['id']!),
+                  ),
+                ],
               ),
             ],
           ),
