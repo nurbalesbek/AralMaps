@@ -20,6 +20,8 @@ import 'package:aralmap/features/search/domain/place.dart';
 import 'package:aralmap/features/tourism/data/photo_credits.dart';
 import 'package:aralmap/features/tourism/data/sights.dart';
 import 'package:aralmap/features/tourism/domain/sight.dart';
+import 'package:aralmap/shared/widgets/app_shell.dart';
+import 'package:aralmap/shared/widgets/map_controls.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -303,7 +305,7 @@ void main() {
     await tester.pumpWidget(appWith(FakeMap()));
     await tester.pumpAndSettle();
 
-    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.byType(AppTabBar), findsOneWidget);
     expect(find.textContaining('OpenStreetMap contributors'), findsOneWidget);
     expect(find.byTooltip('Показать Аральск'), findsOneWidget);
     expect(find.byTooltip('Где я'), findsOneWidget);
@@ -419,7 +421,7 @@ void main() {
       expect(find.text('Поиск в Аральске'), findsOneWidget);
       expect(find.text('Europharma'), findsOneWidget);
       // In the place card (the category chip row also says "Аптека").
-      expect(find.widgetWithText(Card, 'Аптека'), findsOneWidget);
+      expect(find.widgetWithText(MapSheet, 'Аптека'), findsOneWidget);
       expect(find.textContaining('OpenStreetMap contributors'), findsOneWidget);
 
       await tester.tap(find.byTooltip('Закрыть'));
@@ -637,7 +639,12 @@ void main() {
     }
 
     Future<void> goToFavorites(WidgetTester tester) async {
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Избранное'));
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AppTabBar),
+          matching: find.text('Избранное'),
+        ),
+      );
       await tester.pumpAndSettle();
     }
 
@@ -723,7 +730,12 @@ void main() {
 
   group('Explore', () {
     Future<void> openExplore(WidgetTester tester) async {
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Обзор'));
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AppTabBar),
+          matching: find.text('Обзор'),
+        ),
+      );
       await tester.pumpAndSettle();
     }
 
@@ -758,7 +770,7 @@ void main() {
       expect(find.text('Аральск'), findsOneWidget); // header
       expect(find.text('1905'), findsOneWidget); // fact tile
       await tester.scrollUntilVisible(
-        find.text('Вокзал и мозаика о рыбе для Поволжья'),
+        find.text('Вокзал 1905 года и панно о рыбе для Поволжья'),
         200,
         scrollable: exploreList(),
       );
@@ -776,10 +788,10 @@ void main() {
       await tester.pumpWidget(appWith(FakeMap()));
       await tester.pumpAndSettle();
       await openExplore(tester);
-      await openSight(tester, 'Вокзал и мозаика о рыбе для Поволжья');
+      await openSight(tester, 'Вокзал 1905 года и панно о рыбе для Поволжья');
 
       await tester.scrollUntilVisible(
-        find.textContaining('построен в 1905 году'),
+        find.textContaining('официальную историю'),
         200,
       );
       await tester.scrollUntilVisible(find.text('Источники'), 200);
@@ -789,9 +801,36 @@ void main() {
       await tester.tap(find.text('Маршрут'));
       await tester.pumpAndSettle();
       expect(
-        find.text('Маршрут: Вокзал и мозаика о рыбе для Поволжья'),
+        find.text('Маршрут: Вокзал 1905 года и панно о рыбе для Поволжья'),
         findsOneWidget,
       );
+    });
+
+    testWidgets('history: entry card opens the chapters with sources', (
+      tester,
+    ) async {
+      await tester.pumpWidget(appWith(FakeMap()));
+      await tester.pumpAndSettle();
+      await openExplore(tester);
+
+      await tester.scrollUntilVisible(
+        find.text('История Аральска'),
+        200,
+        scrollable: exploreList(),
+      );
+      await tester.ensureVisible(find.text('История Аральска'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('История Аральска'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Шесть колодцев'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('14 вагонов рыбы'), 300);
+      expect(
+        find.textContaining('Жертвуйте, дорогие товарищи'),
+        findsOneWidget,
+      );
+      await tester.scrollUntilVisible(find.text('Вода возвращается'), 300);
+      expect(find.text('Источники:'), findsWidgets);
     });
 
     testWidgets('sight without a known position offers no map buttons', (
@@ -855,8 +894,21 @@ void main() {
         startsWith('https://commons.wikimedia.org/'),
         reason: key,
       );
-      expect(File('assets/photos/$key.jpg').existsSync(), isTrue, reason: key);
-      expect(sights.any((s) => s.id == key), isTrue, reason: '$key: no sight');
+      final asset = (value as Map)['asset'] as String;
+      expect(File('assets/photos/$asset').existsSync(), isTrue, reason: key);
+      // Every photo is used: by a sight or a history chapter.
+      expect(
+        sights.any((s) => s.id == key) ||
+            historyChapters.any((h) => h.photoKey == key),
+        isTrue,
+        reason: '$key: not used',
+      );
+    }
+    // Every photo a chapter asks for exists.
+    for (final h in historyChapters) {
+      if (h.photoKey case final key?) {
+        expect(json.containsKey(key), isTrue, reason: h.title);
+      }
     }
     // The satellite image needs its Copernicus credit line.
     final kokaral = PhotoCredit.fromJson(
@@ -883,12 +935,22 @@ void main() {
 
   group('Account', () {
     Future<void> openProfile(WidgetTester tester) async {
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Профиль'));
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AppTabBar),
+          matching: find.text('Профиль'),
+        ),
+      );
       await tester.pumpAndSettle();
     }
 
     Future<void> openFavorites(WidgetTester tester) async {
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Избранное'));
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AppTabBar),
+          matching: find.text('Избранное'),
+        ),
+      );
       await tester.pumpAndSettle();
     }
 

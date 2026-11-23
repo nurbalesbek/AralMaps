@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' show Point;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +8,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../../core/router/app_routes.dart';
 import '../../../shared/widgets/category_avatar.dart';
+import '../../../shared/widgets/map_controls.dart';
 import '../../favorites/presentation/favorites_controller.dart';
 import '../../location/data/location_service.dart';
 import '../../location/domain/location_result.dart';
@@ -18,6 +20,7 @@ import '../../routing/presentation/route_session.dart';
 import '../../search/data/places_repository.dart';
 import '../../search/domain/place.dart';
 import '../../tourism/data/sights.dart';
+import '../../tourism/domain/sight.dart';
 import '../domain/map_config.dart';
 import 'map_focus.dart';
 import 'widgets/map_view.dart';
@@ -320,11 +323,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     _addPlaceDots();
   }
 
-  /// Circle id → place, for taps on the coloured dots.
-  final Map<String, Place> _dotPlaces = {};
+  /// Feature id (index) → place, for taps on the coloured dots.
+  List<Place> _dotPlaces = const [];
+
+  static const _dotsSource = 'aralmap-places';
+  static const _dotLayer = 'aralmap-dots';
 
   /// Every named point of the town (cafés, pharmacies, schools…) and the
   /// located sights of the Explore tab, as dots in their category colour.
+  /// Each dot is shown on its own (grouping was tried and turned off at
+  /// the user's request).
   Future<void> _addPlaceDots() async {
     final controller = _controller;
     if (controller == null) return;
@@ -336,30 +344,68 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         if (s.hasLocation) s.toPlace(),
     ];
     if (!mounted || controller != _controller) return;
-    final circles = await controller.addCircles([
-      for (final p in dots)
-        CircleOptions(
-          geometry: LatLng(p.latitude, p.longitude),
-          circleRadius: p.category == PlaceCategory.sight ? 8 : 6,
-          circleColor: p.category.colorHex,
-          circleStrokeWidth: 2,
-          circleStrokeColor: '#FFFFFF',
-        ),
-    ]);
-    _dotPlaces.clear();
-    for (final (i, c) in circles.indexed) {
-      _dotPlaces[c.id] = dots[i];
-    }
-    controller.onCircleTapped.add(_onDotTapped);
+    _dotPlaces = dots;
+
+    await controller.addSource(
+      _dotsSource,
+      GeojsonSourceProperties(
+        data: {
+          'type': 'FeatureCollection',
+          'features': [
+            for (final (i, p) in dots.indexed)
+              {
+                'type': 'Feature',
+                'id': i,
+                'properties': {
+                  'color': p.category.colorHex,
+                  'sight': p.category == PlaceCategory.sight,
+                },
+                'geometry': {
+                  'type': 'Point',
+                  'coordinates': [p.longitude, p.latitude],
+                },
+              },
+          ],
+        },
+      ),
+    );
+
+    // Dots in their category colour; sights a bit larger.
+    await controller.addCircleLayer(
+      _dotsSource,
+      _dotLayer,
+      const CircleLayerProperties(
+        circleColor: ['get', 'color'],
+        circleRadius: [
+          'case',
+          ['get', 'sight'],
+          8,
+          6,
+        ],
+        circleStrokeWidth: 2,
+        circleStrokeColor: '#FFFFFF',
+      ),
+    );
+    controller.onFeatureTapped.add(_onFeatureTapped);
   }
 
-  void _onDotTapped(Circle circle) {
-    final place = _dotPlaces[circle.id];
-    if (place != null) _showPlace(place);
+  void _onFeatureTapped(
+    Point<double> point,
+    LatLng coordinates,
+    String id,
+    String layerId,
+    Annotation? annotation,
+  ) {
+    if (layerId == _dotLayer) {
+      final index = num.tryParse(id)?.toInt();
+      if (index != null && index >= 0 && index < _dotPlaces.length) {
+        _showPlace(_dotPlaces[index]);
+      }
+    }
   }
 
   void _retry() {
-    _dotPlaces.clear();
+    _dotPlaces = const [];
     setState(() {
       _controller = null;
       _placeMarker = null; // belonged to the discarded native map
@@ -445,10 +491,25 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               ),
             ),
           ),
+          if (_status == _MapStatus.ready)
+            Positioned(
+              right: 12,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: _ZoomButtons(
+                  onZoomIn: () =>
+                      _controller?.animateCamera(CameraUpdate.zoomIn()),
+                  onZoomOut: () =>
+                      _controller?.animateCamera(CameraUpdate.zoomOut()),
+                ),
+              ),
+            ),
           Positioned(
             left: 0,
             right: 0,
-            bottom: 0,
+            // Above the floating tab bar (the shell extends the body under it).
+            bottom: MediaQuery.paddingOf(context).bottom,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -457,7 +518,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: Padding(
-                      padding: const EdgeInsets.only(right: 16, bottom: 12),
+                      padding: const EdgeInsets.only(right: 12, bottom: 12),
                       child: _MapButtons(
                         locating: _locating,
                         onRecenter: _recenter,
@@ -465,27 +526,22 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       ),
                     ),
                   ),
+                // Always visible, just above the sheet (ODbL).
+                const _Attribution(),
                 if (_route case final route?)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                    child: RoutePanel(
-                      session: route,
-                      onClose: _closeRoute,
-                      onModeChanged: _changeRouteMode,
-                      onChooseOrigin: _chooseRouteOrigin,
-                      onUseMyLocation: _routeFromMyLocation,
-                    ),
+                  RoutePanel(
+                    session: route,
+                    onClose: _closeRoute,
+                    onModeChanged: _changeRouteMode,
+                    onChooseOrigin: _chooseRouteOrigin,
+                    onUseMyLocation: _routeFromMyLocation,
                   )
                 else if (_selectedPlace case final place?)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                    child: _PlaceCard(
-                      place: place,
-                      onClose: _clearPlace,
-                      onRoute: () => _startRoute(place),
-                    ),
+                  _PlaceCard(
+                    place: place,
+                    onClose: _clearPlace,
+                    onRoute: () => _startRoute(place),
                   ),
-                const _Attribution(),
               ],
             ),
           ),
@@ -578,6 +634,7 @@ class _CategoryChips extends StatelessWidget {
   }
 }
 
+/// Bottom-right: back to Aral, and "where am I" (the main map button).
 class _MapButtons extends StatelessWidget {
   const _MapButtons({
     required this.locating,
@@ -593,31 +650,54 @@ class _MapButtons extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        FloatingActionButton.small(
-          heroTag: 'recenter-city',
-          onPressed: onRecenter,
+        MapRoundButton(
+          icon: Icons.location_city,
           tooltip: 'Показать Аральск',
-          child: const Icon(Icons.location_city),
+          onPressed: onRecenter,
+          size: 44,
         ),
         const SizedBox(height: 12),
-        FloatingActionButton(
-          heroTag: 'my-location',
-          onPressed: locating ? null : onMyLocation,
+        MapRoundButton(
+          icon: Icons.near_me,
           tooltip: 'Где я',
-          child: locating
-              ? const SizedBox.square(
-                  dimension: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2.5),
-                )
-              : const Icon(Icons.my_location),
+          onPressed: onMyLocation,
+          size: 54,
+          iconColor: Theme.of(context).colorScheme.primary,
+          busy: locating,
         ),
       ],
     );
   }
 }
 
+/// Right edge, mid-height: zoom in / out.
+class _ZoomButtons extends StatelessWidget {
+  const _ZoomButtons({required this.onZoomIn, required this.onZoomOut});
+
+  final VoidCallback onZoomIn;
+  final VoidCallback onZoomOut;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      MapRoundButton(
+        icon: Icons.add,
+        tooltip: 'Приблизить',
+        onPressed: onZoomIn,
+      ),
+      const SizedBox(height: 10),
+      MapRoundButton(
+        icon: Icons.remove,
+        tooltip: 'Отдалить',
+        onPressed: onZoomOut,
+      ),
+    ],
+  );
+}
+
+/// Place page at the bottom: what it is, then actions in a row.
 class _PlaceCard extends ConsumerWidget {
   const _PlaceCard({
     required this.place,
@@ -628,6 +708,10 @@ class _PlaceCard extends ConsumerWidget {
   final Place place;
   final VoidCallback onClose;
   final VoidCallback onRoute;
+
+  /// The Explore entry for this place, if it is one of the sights.
+  Sight? get _sight =>
+      sights.where((s) => s.hasLocation && s.title == place.name).firstOrNull;
 
   Future<void> _toggleFavorite(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
@@ -650,65 +734,84 @@ class _PlaceCard extends ConsumerWidget {
     final theme = Theme.of(context);
     final isFavorite =
         ref.watch(favoritesProvider).value?.contains(place) ?? false;
+    final sight = _sight;
 
-    return Card(
-      elevation: 3,
-      shadowColor: Colors.black26,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 4, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                CategoryAvatar(place.category),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(place.name, style: theme.textTheme.titleMedium),
-                      const SizedBox(height: 2),
-                      Text(place.subtitle, style: theme.textTheme.bodySmall),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Закрыть',
-                  icon: const Icon(Icons.close),
-                  onPressed: onClose,
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: Row(
-                children: [
-                  FilledButton.tonalIcon(
-                    onPressed: onRoute,
-                    icon: const Icon(Icons.directions, size: 18),
-                    label: const Text('Маршрут'),
-                  ),
-                  const SizedBox(width: 8),
-                  OutlinedButton.icon(
-                    onPressed: () => _toggleFavorite(context, ref),
-                    icon: Icon(
-                      isFavorite ? Icons.bookmark : Icons.bookmark_border,
-                      size: 18,
+    return MapSheet(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CategoryAvatar(place.category, radius: 22),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(place.name, style: theme.textTheme.titleLarge),
+                    const SizedBox(height: 2),
+                    Text(
+                      place.subtitle,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: place.category.color,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                    label: Text(isFavorite ? 'В избранном' : 'Сохранить'),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
-        ),
+              _CloseButton(onPressed: onClose),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              SheetAction(
+                icon: Icons.directions,
+                label: 'Маршрут',
+                primary: true,
+                onTap: onRoute,
+              ),
+              SheetAction(
+                icon: isFavorite ? Icons.bookmark : Icons.bookmark_border,
+                label: isFavorite ? 'В избранном' : 'Сохранить',
+                onTap: () => _toggleFavorite(context, ref),
+              ),
+              if (sight != null)
+                SheetAction(
+                  icon: Icons.auto_stories_outlined,
+                  label: 'Подробнее',
+                  onTap: () => context.go(AppRoutes.sight(sight.id)),
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }
+}
+
+/// Small grey round "×" in the corner of a sheet.
+class _CloseButton extends StatelessWidget {
+  const _CloseButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    tooltip: 'Закрыть',
+    onPressed: onPressed,
+    style: IconButton.styleFrom(
+      backgroundColor: Theme.of(context).colorScheme.outline
+          .withValues(alpha: 0.5),
+      minimumSize: const Size.square(32),
+      padding: EdgeInsets.zero,
+    ),
+    icon: const Icon(Icons.close, size: 18),
+  );
 }
 
 class _StatusCard extends StatelessWidget {

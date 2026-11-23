@@ -1,5 +1,6 @@
 {
   "harbour-fishermen-museum": {
+    "asset": "harbour-fishermen-museum.jpg",
     "file": "File:Aral harbour.jpg",
     "author": "Yorian",
     "credit": "",
@@ -9,6 +10,7 @@
     "date": "2009-08-13"
   },
   "zhalanash": {
+    "asset": "zhalanash.jpg",
     "file": "File:The Aral sea is drying up. Bay of Zhalanash, Ship Cemetery, Aralsk, Kazakhstan.jpg",
     "author": "Zhanat Kulenov",
     "credit": "",
@@ -18,6 +20,7 @@
     "date": "2006-04-11 08:55:36"
   },
   "north-aral-sea": {
+    "asset": "north-aral-sea.jpg",
     "file": "File:Aerial view of North Aral Sea in 2013 (1).jpg",
     "author": "Obakeneko",
     "credit": "",
@@ -27,6 +30,7 @@
     "date": "2013-10-06"
   },
   "kokaral-dam": {
+    "asset": "kokaral-dam.jpg",
     "file": "File:Dike Kokaral 2021-07-20 Sentinel-2 L2A True color.jpg",
     "author": "European Space Agency",
     "credit": "Contains modified Copernicus Sentinel data 2021",
@@ -34,5 +38,25 @@
     "licenseUrl": "",
     "source": "https://commons.wikimedia.org/wiki/File:Dike_Kokaral_2021-07-20_Sentinel-2_L2A_True_color.jpg",
     "date": "2021-07-20"
+  },
+  "history-fish-factory": {
+    "asset": "history-fish-factory.jpg",
+    "file": "File:Fish factory, Aralsk, Kazakhstan.jpg",
+    "author": "Zhanat Kulenov",
+    "credit": "",
+    "license": "CC BY-SA 3.0 igo",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/igo/deed.en",
+    "source": "https://commons.wikimedia.org/wiki/File:Fish_factory,_Aralsk,_Kazakhstan.jpg",
+    "date": "2006-04-10 10:03:16"
+  },
+  "history-sea-1964-2026": {
+    "asset": "history-sea-1964-2026.jpg",
+    "file": "File:Aral Sea 1964 vs. August 25, 2026.png",
+    "author": "National Aeronautics and Space Administration (NASA), collage by Dylan240.",
+    "credit": "",
+    "license": "Public domain",
+    "licenseUrl": "",
+    "source": "https://commons.wikimedia.org/wiki/File:Aral_Sea_1964_vs._August_25,_2026.png",
+    "date": "1964-08-22, 2026-08-25"
   }
 }

@@ -63,7 +63,13 @@ class SightScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: Text(sight.area.label)),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        // + bottom inset: content stays above the floating tab bar.
+        padding: EdgeInsets.fromLTRB(
+          16,
+          8,
+          16,
+          24 + MediaQuery.paddingOf(context).bottom,
+        ),
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(16),

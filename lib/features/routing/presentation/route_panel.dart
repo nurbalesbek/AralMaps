@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../../../shared/widgets/map_controls.dart';
 import '../domain/road_graph.dart';
 import 'route_session.dart';
 
@@ -23,69 +24,66 @@ class RoutePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
-      elevation: 3,
-      shadowColor: Colors.black26,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 4, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Маршрут: ${session.destination.name}',
-                    style: theme.textTheme.titleMedium,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+    return MapSheet(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.directions, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Маршрут: ${session.destination.name}',
+                  style: theme.textTheme.titleLarge,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                IconButton(
-                  tooltip: 'Закрыть маршрут',
-                  icon: const Icon(Icons.close),
-                  onPressed: onClose,
-                ),
-              ],
-            ),
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _OriginRow(
-                    origin: session.origin,
-                    onChoose: onChooseOrigin,
-                    onUseMyLocation: onUseMyLocation,
-                  ),
-                  const SizedBox(height: 10),
-                  SegmentedButton<TravelMode>(
-                    segments: const [
-                      ButtonSegment(
-                        value: TravelMode.walk,
-                        icon: Icon(Icons.directions_walk),
-                        label: Text('Пешком'),
-                      ),
-                      ButtonSegment(
-                        value: TravelMode.drive,
-                        icon: Icon(Icons.directions_car),
-                        label: Text('На машине'),
-                      ),
-                    ],
-                    selected: {session.mode},
-                    showSelectedIcon: false,
-                    onSelectionChanged: session.computing
-                        ? null
-                        : (s) => onModeChanged(s.first),
-                  ),
-                  const SizedBox(height: 14),
-                  _Outcome(session: session, onChooseOrigin: onChooseOrigin),
-                ],
               ),
-            ),
-          ],
-        ),
+              IconButton(
+                tooltip: 'Закрыть маршрут',
+                onPressed: onClose,
+                style: IconButton.styleFrom(
+                  backgroundColor: theme.colorScheme.outline.withValues(
+                    alpha: 0.5,
+                  ),
+                  minimumSize: const Size.square(32),
+                  padding: EdgeInsets.zero,
+                ),
+                icon: const Icon(Icons.close, size: 18),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          _OriginRow(
+            origin: session.origin,
+            onChoose: onChooseOrigin,
+            onUseMyLocation: onUseMyLocation,
+          ),
+          const SizedBox(height: 10),
+          SegmentedButton<TravelMode>(
+            segments: const [
+              ButtonSegment(
+                value: TravelMode.walk,
+                icon: Icon(Icons.directions_walk),
+                label: Text('Пешком'),
+              ),
+              ButtonSegment(
+                value: TravelMode.drive,
+                icon: Icon(Icons.directions_car),
+                label: Text('На машине'),
+              ),
+            ],
+            selected: {session.mode},
+            showSelectedIcon: false,
+            onSelectionChanged: session.computing
+                ? null
+                : (s) => onModeChanged(s.first),
+          ),
+          const SizedBox(height: 14),
+          _Outcome(session: session, onChooseOrigin: onChooseOrigin),
+        ],
       ),
     );
   }

@@ -43,14 +43,21 @@ abstract final class AppTheme {
           side: const BorderSide(color: AppColors.outline),
         ),
       ),
+      // White tab bar like the map buttons: no pill indicator, the selected
+      // tab is shown by colour alone.
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: AppColors.surface,
-        indicatorColor: AppColors.primary.withValues(alpha: 0.12),
+        surfaceTintColor: Colors.transparent,
+        indicatorColor: Colors.transparent,
+        overlayColor: WidgetStateProperty.all(
+          AppColors.primary.withValues(alpha: 0.06),
+        ),
         elevation: 0,
-        height: 68,
+        height: 62,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         labelTextStyle: WidgetStateProperty.resolveWith(
           (states) => TextStyle(
-            fontSize: 12,
+            fontSize: 11.5,
             fontWeight: states.contains(WidgetState.selected)
                 ? FontWeight.w600
                 : FontWeight.w500,
@@ -61,6 +68,7 @@ abstract final class AppTheme {
         ),
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
+            size: 26,
             color: states.contains(WidgetState.selected)
                 ? AppColors.primary
                 : AppColors.textSecondary,

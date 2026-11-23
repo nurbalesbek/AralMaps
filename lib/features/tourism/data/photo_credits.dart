@@ -52,7 +52,8 @@ final sightPhotosProvider = FutureProvider<Map<String, SightPhoto>>((
   return {
     for (final MapEntry(:key, :value) in json.entries)
       key: (
-        asset: 'assets/photos/$key.jpg',
+        asset:
+            'assets/photos/${(value as Map)['asset'] as String? ?? '$key.jpg'}',
         credit: PhotoCredit.fromJson(value as Map<String, dynamic>),
       ),
   };

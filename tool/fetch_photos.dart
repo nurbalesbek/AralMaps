@@ -27,7 +27,14 @@ const photos = {
     'File:Dike Kokaral 2021-07-20 Sentinel-2 L2A True color.jpg',
     1080,
   ),
+  // History chapters.
+  'history-fish-factory': ('File:Fish factory, Aralsk, Kazakhstan.jpg', 1080),
+  // A PNG: smaller width keeps it under ~0.5 MB.
+  'history-sea-1964-2026': ('File:Aral Sea 1964 vs. August 25, 2026.png', 720),
 };
+// Checked and NOT used: "20231216 Aral Railway Station 01/02.jpg" show
+// Alar station in China (阿拉尔站), not Aral; "A school overtaken by the
+// dune, Aral" shows a shrub, not a school.
 
 const outDir = 'assets/photos';
 
@@ -69,14 +76,15 @@ Future<void> main() async {
       continue;
     }
 
-    final img = await (await client.getUrl(
-      Uri.parse(info['thumburl'] as String),
-    )).close();
-    final file = File('$outDir/$key.jpg');
+    final thumb = info['thumburl'] as String;
+    final img = await (await client.getUrl(Uri.parse(thumb))).close();
+    final ext = thumb.toLowerCase().endsWith('.png') ? 'png' : 'jpg';
+    final file = File('$outDir/$key.$ext');
     await img.pipe(file.openWrite());
     totalBytes += file.lengthSync();
 
     credits[key] = {
+      'asset': '$key.$ext',
       'file': title,
       'author': m('Artist').isNotEmpty ? m('Artist') : m('Credit'),
       'credit': m('Attribution'),

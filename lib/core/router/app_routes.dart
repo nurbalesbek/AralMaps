@@ -12,4 +12,5 @@ abstract final class AppRoutes {
   static const signIn = '/sign-in';
 
   static String sight(String id) => '$explore/sight/$id';
+  static const history = '$explore/history';
 }

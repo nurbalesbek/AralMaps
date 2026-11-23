@@ -2,7 +2,7 @@
 
 Offline-first mobile map of Aral (Аральск), Kazakhstan. Flutter + MapLibre + OpenStreetMap.
 
-> Status: **Phases 1–8 — offline map of Aral (one-time ~14 MB download), "where am I", offline place search, offline walking and driving routes, favorites stored on the device, sights with sources.** No turn-by-turn navigation; no accounts yet.
+> Status: **Phases 1–9 — offline map of Aral (one-time ~14 MB download), "where am I", offline place search, offline walking and driving routes, favorites (on the device, synced to an account when signed in), sights with photos and sources, the town's history.** Accounts need a Supabase project (see `supabase/schema.sql`, `env/supabase.example.json`). No turn-by-turn navigation.
 
 ## Requirements
 

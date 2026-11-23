@@ -11,7 +11,12 @@ import 'sight_visuals.dart';
 /// Facts shown as coloured tiles. Each one is stated in the sources of the
 /// sights it belongs to (see sights.dart); ranges where sources differ.
 const _facts = [
-  ('1905', 'построен вокзал Аральска', Color(0xFF287E72)),
+  ('1905', 'открыта станция «Аральское Море»', Color(0xFF287E72)),
+  (
+    '14 вагонов',
+    'рыбы отправили голодающему Поволжью в 1921',
+    Color(0xFF8E44AD),
+  ),
   ('≈100 км', 'так далеко от города отступало море', Color(0xFFB7791F)),
   ('2005', 'достроена Кокаральская плотина', Color(0xFF1F6F9F)),
   ('12–20 км', 'до воды сейчас (оценки 2015–2018)', Color(0xFFC0392B)),
@@ -94,6 +99,7 @@ class ExploreScreen extends StatelessWidget {
             ),
           ),
           const SliverToBoxAdapter(child: _FactTiles()),
+          const SliverToBoxAdapter(child: _HistoryEntry()),
           for (final area in SightArea.values) ...[
             SliverToBoxAdapter(
               child: Padding(
@@ -114,7 +120,13 @@ class ExploreScreen extends StatelessWidget {
           ],
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
+              // + bottom inset: stays above the floating tab bar.
+              padding: EdgeInsets.fromLTRB(
+                16,
+                24,
+                16,
+                32 + MediaQuery.paddingOf(context).bottom,
+              ),
               child: Text(
                 'Описания составлены по открытым источникам, ссылки — на '
                 'странице каждого места. Фото — Wikimedia Commons, авторы '
@@ -176,6 +188,65 @@ class _FactTiles extends StatelessWidget {
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Big entry card to the town's story.
+class _HistoryEntry extends StatelessWidget {
+  const _HistoryEntry();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Material(
+        borderRadius: BorderRadius.circular(20),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => context.go(AppRoutes.history),
+          child: Ink(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF1F6F9F), Color(0xFF287E72)],
+              ),
+            ),
+            padding: const EdgeInsets.all(18),
+            child: Row(
+              children: [
+                const Icon(Icons.auto_stories, color: Colors.white, size: 40),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'История Аральска',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'От «Шести колодцев» до моря, которое ушло и '
+                        'начало возвращаться — 7 глав',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.92),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: Colors.white),
+              ],
+            ),
+          ),
         ),
       ),
     );
